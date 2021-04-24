@@ -1,4 +1,4 @@
-package gosusb
+package core
 
 type Class uint8
 

@@ -1,5 +1,5 @@
 // Copyright 2013 Google Inc.  All rights reserved.
-// Copyright 2016 the gosusb Authors.  All rights reserved.
+// Copyright 2016 the core Authors.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package usbid
 import (
 	"bufio"
 	"fmt"
-	"github.com/pixfid/luft/gosusb"
+	"github.com/pixfid/luft/core"
 	"io"
 	"log"
 	"net/http"
@@ -36,10 +36,10 @@ const (
 
 var (
 	// Vendors stores the vendor and product ID mappings.
-	Vendors map[gosusb.ID]*Vendor
+	Vendors map[core.ID]*Vendor
 
 	// Classes stores the class, subclass and protocol mappings.
-	Classes map[gosusb.Class]*Class
+	Classes map[core.Class]*Class
 )
 
 // LoadFromURL replaces the built-in vendor and class mappings with ones loaded
@@ -123,7 +123,7 @@ func LoadFromFile(path string) error {
 func init() {
 	ids, cls, err := ParseIDs(strings.NewReader(usbIdListData))
 	if err != nil {
-		log.Printf("usbid: failed to parse: %s", err)
+		log.Printf("usbid: failed to parsers: %s", err)
 		return
 	}
 
@@ -144,10 +144,10 @@ func FindDevice(vid, pid string) (manufactStr string, productStr string) {
 	v := hex2int(vid)
 	p := hex2int(pid)
 
-	vendor := Vendors[gosusb.ID(v)]
+	vendor := Vendors[core.ID(v)]
 	if vendor != nil {
 		manufactStr = vendor.String()
-		product := vendor.Product[gosusb.ID(p)]
+		product := vendor.Product[core.ID(p)]
 		if product != nil {
 			productStr = product.String()
 		}

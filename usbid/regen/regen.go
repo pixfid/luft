@@ -1,5 +1,5 @@
 // Copyright 2013 Google Inc.  All rights reserved.
-// Copyright 2016 the gosusb Authors.  All rights reserved.
+// Copyright 2016 the core Authors.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ func main() {
 
 	ids, cls, err := usbid.ParseIDs(bytes.NewReader(data))
 	if err != nil {
-		log.Fatalf("failed to parse %q: %s", *remote, err)
+		log.Fatalf("failed to parsers %q: %s", *remote, err)
 	}
 
 	log.Printf("Successfully fetched %q:", *remote)
@@ -65,7 +65,7 @@ func main() {
 
 	template, err := template.New("").Parse(string(rawTemplate))
 	if err != nil {
-		log.Fatalf("failed to parse template %q: %s", *dataFile, err)
+		log.Fatalf("failed to parsers template %q: %s", *dataFile, err)
 	}
 
 	out, err := os.Create(*outFile)

@@ -1,5 +1,5 @@
 // Copyright 2013 Google Inc.  All rights reserved.
-// Copyright 2016 the gosusb Authors.  All rights reserved.
+// Copyright 2016 the core Authors.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ package usbid
 
 import (
 	"fmt"
-	"github.com/pixfid/luft/gosusb"
+	"github.com/pixfid/luft/core"
 )
 
 // Describe returns a human readable string describing the vendor and product
@@ -36,7 +36,7 @@ import (
 //   - *gousb.DeviceDesc       "Product (Vendor)"
 func Describe(val interface{}) string {
 	switch val := val.(type) {
-	case *gosusb.DeviceDesc:
+	case *core.DeviceDesc:
 		if v, ok := Vendors[val.Vendor]; ok {
 			if d, ok := v.Product[val.Product]; ok {
 				return fmt.Sprintf("%s (%s)", d, v)
@@ -52,17 +52,17 @@ func Describe(val interface{}) string {
 // and protocol associated with a device or interface.
 //
 // The given val must be one of the following:
-//   - *gosusb.DeviceDesc       "Class (SubClass) Protocol"
-//   - gosusb.InterfaceSetup   "IfClass (IfSubClass) IfProtocol"
+//   - *core.DeviceDesc       "Class (SubClass) Protocol"
+//   - core.InterfaceSetup   "IfClass (IfSubClass) IfProtocol"
 func Classify(val interface{}) string {
 	var (
-		class, sub gosusb.Class
-		proto      gosusb.Protocol
+		class, sub core.Class
+		proto      core.Protocol
 	)
 	switch val := val.(type) {
-	case *gosusb.DeviceDesc:
+	case *core.DeviceDesc:
 		class, sub, proto = val.Class, val.SubClass, val.Protocol
-	case gosusb.InterfaceSetting:
+	case core.InterfaceSetting:
 		class, sub, proto = val.Class, val.SubClass, val.Protocol
 	default:
 		return fmt.Sprintf("Unknown (%T)", val)
@@ -75,7 +75,7 @@ func Classify(val interface{}) string {
 			}
 			return fmt.Sprintf("%s (%s)", c, s)
 		}
-		return fmt.Sprintf("%s", c)
+		return fmt.Sprintf("%s", c.String())
 	}
-	return fmt.Sprintf("Unknown %s.%s.%s", class, sub, proto)
+	return fmt.Sprintf("Unknown %v.%v.%s", class, sub, proto)
 }

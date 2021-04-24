@@ -17,19 +17,34 @@ with reduced functionality (custom log directory)
 $ ./luft -h
 
 Usage:
-   luft {flags}
-   luft <command> {flags}
+  luft [OPTIONS]
 
-Commands: 
-   help                          displays usage information
-   ids                           usb.ids database
-   local                         local events history.
-   remote                        remote events history.
-   version                       displays version number
+Application Options:
+  -m, --masstorage                            show only mass storage devices [$MASSTORAGE]
+  -u, --untrusted                             show only untrusted devices [$UNTRUSTED]
+  -n, --number=                               number of events to show [$NUMBER]
+  -s, --sort=[asc|desc]                       sort events (default: asc) [$SORT]
+  -e, --export                                export events [$EXPORT]
+  -c, --check                                 check devices for whitelist [$CHECK]
+  -E, --extusbids                             external usbids data base [$EXTUSBIDS]
+  -W, --whitelist=                            whitelist path [$WHITELIST]
+  -U, --usbids=                               usbids path [$USBIDS]
 
-Flags: 
-   -h, --help                    displays usage information of the application or a command (default: false)
-   -v, --version                 displays version number (default: false)
+events:
+  -S, --events.source=[local|remote|database] events target
+      --events.path=                          log directory (default: /var/log/)
+
+export:
+  -F, --events.export.format=[json|xml|pdf]   events export format (default: pdf) [$EVENTS_EXPORT_FORMAT]
+
+remote:
+  -I, --events.remote.ip=                     ip address [$EVENTS_REMOTE_IP]
+      --events.remote.port=                   ssh port (default: 22) [$EVENTS_REMOTE_PORT]
+  -L, --events.remote.login=                  login [$EVENTS_REMOTE_LOGIN]
+  -P, --events.remote.password=               password [$EVENTS_REMOTE_PASSWORD]
+
+Help Options:
+  -h, --help                                  Show this help message
 
 ```
 
@@ -38,29 +53,23 @@ Examples
 
 ### Events history:
 
-#### Local events' history view: 
-```./luft local history --sort=asc --check```
+#### Get USB event history:
+```./luft -cm -S=local -W=99_PDAC_LOCAL_flash.rules```
 
-#### Local events view with external LOG, WHITELIST and USB.IDS:
-```./luft local history --log ~/Downloads/log --sort=asc --check --whitelist=99_PDAC_LOCAL_flash.rules --usbids=usb.ids --external```
+#### Get USB events history from remote host:
+```./luft -cm -W=99_PDAC_LOCAL_flash.rules -S=remote -I=10.211.55.11 -L=user -P=password```
 
-### Remote events view
-```./luft remote history --server=127.0.0.1 --port=22 --login=login --password=password --check --sort=asc --whitelist=99_PDAC_LOCAL_flash.rules```
 <img width="1282" alt="Screenshot 2021-04-18 at 23 07 39" src="https://user-images.githubusercontent.com/1672087/115159258-f6259d00-a09a-11eb-90e1-428e0793a1b0.png">
 
 
 ### Export with various formats json, xml, pdf (with logo `stats.png`)
-### Export With external LOG, WHITELIST and USB.IDS
-```./luft local export --format pdf --log ~/Downloads/log --sort asc --check --whitelist 99_PDAC_LOCAL_flash.rules --usbids usb.ids --external```
+
+#### Export USB event history
+```./luft -cmE -S=local -W=99_PDAC_LOCAL_flash.rules```
 
 ### PDF Report example:
 <img width="1324" alt="Screenshot 2021-04-11 at 14 36 11" src="https://user-images.githubusercontent.com/1672087/114302784-4e750180-9ad3-11eb-9642-cc760bbf9c3f.png">
 
-### USB.IDS: (`search` and `download` / `update` database)
-
-####  Search device by `vid` & `pid`
-
-```./luft ids search --vid 03f0 --pid 0f0c```
 
 TODO
 ==========

@@ -1,5 +1,5 @@
 // Copyright 2013 Google Inc.  All rights reserved.
-// Copyright 2016 the gosusb Authors.  All rights reserved.
+// Copyright 2016 the core Authors.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package usbid
 import (
 	"bufio"
 	"fmt"
-	"github.com/pixfid/luft/gosusb"
+	"github.com/pixfid/luft/core"
 	"io"
 	"strconv"
 	"strings"
@@ -28,7 +28,7 @@ import (
 // known products by their ID.
 type Vendor struct {
 	Name    string
-	Product map[gosusb.ID]*Product
+	Product map[core.ID]*Product
 }
 
 // String returns the name of the vendor.
@@ -40,7 +40,7 @@ func (v Vendor) String() string {
 // the names of any interfaces that were specified.
 type Product struct {
 	Name      string
-	Interface map[gosusb.ID]string
+	Interface map[core.ID]string
 }
 
 // String returns the name of the product.
@@ -51,7 +51,7 @@ func (p Product) String() string {
 // A Class contains the name of the class and mappings for each subclass.
 type Class struct {
 	Name     string
-	SubClass map[gosusb.Class]*SubClass
+	SubClass map[core.Class]*SubClass
 }
 
 // String returns the name of the class.
@@ -62,7 +62,7 @@ func (c Class) String() string {
 // A SubClass contains the name of the subclass and any associated protocols.
 type SubClass struct {
 	Name     string
-	Protocol map[gosusb.Protocol]string
+	Protocol map[core.Protocol]string
 }
 
 // String returns the name of the SubClass.
@@ -74,9 +74,9 @@ func (s SubClass) String() string {
 // should not be necessary, as a set of mappings is already embedded in the library.
 // If a new or specialized file is obtained, this can be used to retrieve the mappings,
 // which can be stored in the global Vendors and Classes map.
-func ParseIDs(r io.Reader) (map[gosusb.ID]*Vendor, map[gosusb.Class]*Class, error) {
-	vendors := make(map[gosusb.ID]*Vendor, 2800)
-	classes := make(map[gosusb.Class]*Class) // TODO(kevlar): count
+func ParseIDs(r io.Reader) (map[core.ID]*Vendor, map[core.Class]*Class, error) {
+	vendors := make(map[core.ID]*Vendor, 2800)
+	classes := make(map[core.Class]*Class) // TODO(kevlar): count
 
 	split := func(s string) (kind string, level int, id uint64, name string, err error) {
 		pieces := strings.SplitN(s, "  ", 2)
@@ -115,7 +115,7 @@ func ParseIDs(r io.Reader) (map[gosusb.ID]*Vendor, map[gosusb.Class]*Class, erro
 	var device *Product
 
 	parseVendor := func(level int, raw uint64, name string) error {
-		id := gosusb.ID(raw)
+		id := core.ID(raw)
 
 		switch level {
 		case 0:
@@ -133,7 +133,7 @@ func ParseIDs(r io.Reader) (map[gosusb.ID]*Vendor, map[gosusb.Class]*Class, erro
 				Name: name,
 			}
 			if vendor.Product == nil {
-				vendor.Product = make(map[gosusb.ID]*Product)
+				vendor.Product = make(map[core.ID]*Product)
 			}
 			vendor.Product[id] = device
 
@@ -143,7 +143,7 @@ func ParseIDs(r io.Reader) (map[gosusb.ID]*Vendor, map[gosusb.Class]*Class, erro
 			}
 
 			if device.Interface == nil {
-				device.Interface = make(map[gosusb.ID]string)
+				device.Interface = make(map[core.ID]string)
 			}
 			device.Interface[id] = name
 
@@ -164,7 +164,7 @@ func ParseIDs(r io.Reader) (map[gosusb.ID]*Vendor, map[gosusb.Class]*Class, erro
 			class = &Class{
 				Name: name,
 			}
-			classes[gosusb.Class(id)] = class
+			classes[core.Class(id)] = class
 
 		case 1:
 			if class == nil {
@@ -175,9 +175,9 @@ func ParseIDs(r io.Reader) (map[gosusb.ID]*Vendor, map[gosusb.Class]*Class, erro
 				Name: name,
 			}
 			if class.SubClass == nil {
-				class.SubClass = make(map[gosusb.Class]*SubClass)
+				class.SubClass = make(map[core.Class]*SubClass)
 			}
-			class.SubClass[gosusb.Class(id)] = subclass
+			class.SubClass[core.Class(id)] = subclass
 
 		case 2:
 			if subclass == nil {
@@ -185,9 +185,9 @@ func ParseIDs(r io.Reader) (map[gosusb.ID]*Vendor, map[gosusb.Class]*Class, erro
 			}
 
 			if subclass.Protocol == nil {
-				subclass.Protocol = make(map[gosusb.Protocol]string)
+				subclass.Protocol = make(map[core.Protocol]string)
 			}
-			subclass.Protocol[gosusb.Protocol(id)] = name
+			subclass.Protocol[core.Protocol(id)] = name
 
 		default:
 			return fmt.Errorf("too many levels of nesting for class")
