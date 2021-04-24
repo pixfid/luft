@@ -5,7 +5,7 @@ import (
 	"github.com/pixfid/luft/data"
 	"github.com/pixfid/luft/lib/parsers"
 	"github.com/pixfid/luft/lib/utils"
-	"github.com/pixfid/luft/usbid"
+	"github.com/pixfid/luft/usbids"
 	"github.com/umputun/go-flags"
 	"log"
 	"os"
@@ -121,7 +121,7 @@ func main() {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Using external usb.ids}}::green", time.Now().Format(time.Stamp)))
 		if _, err := os.Stat(opts.External.UsbIds); !os.IsNotExist(err) {
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] External usb.ids loaded}}::green", time.Now().Format(time.Stamp)))
-			err := usbid.LoadFromFile(opts.External.UsbIds)
+			err := usbids.LoadFromFile(opts.External.UsbIds)
 			if err != nil {
 				_, _ = cfmt.Println("{{Error loading external usb.ids will be using embedded}}::red")
 			}

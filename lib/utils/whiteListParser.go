@@ -1,31 +1,43 @@
 package utils
 
 import (
-	"bufio"
-	"os"
+	"io/ioutil"
+	"log"
 	"regexp"
-	"strings"
 )
 
-var whiteList []string
+var WhiteList WhiteListCache
 
-func ParseWL(wlPath string) error {
-	file, err := os.Open(wlPath)
-	if err != nil {
-		return err
-	}
-	reVid := regexp.MustCompile(`ATTRS{serial}==(.*?$)`)
-	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
+type WhiteListCache struct {
+	cache []string
+}
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		result := GetSub(reVid, line, 1)
-		if result != "" {
-			result = strings.Trim(strings.Split(result, ",")[0], `"`)
-			whiteList = append(whiteList, result)
+func (c *WhiteListCache) Add(serial string) {
+	c.cache = append(c.cache, serial)
+}
+
+func (c *WhiteListCache) Has(serial string) bool {
+	for _, innerSerial := range c.cache {
+		if innerSerial == serial {
+			return true
 		}
 	}
-	return nil
+
+	return false
+}
+
+func ParseWL(wlPath string) error {
+	cache := WhiteListCache{}
+	reVid := regexp.MustCompile(`ATTRS{serial}=="(.*?)"`)
+	content, err := ioutil.ReadFile(wlPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	result := GetSubs(reVid, string(content), 1)
+	for i := range result {
+		cache.Add(result[i][1])
+	}
+
+	WhiteList = cache
+	return err
 }

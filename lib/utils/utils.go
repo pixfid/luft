@@ -8,7 +8,7 @@ import (
 	"github.com/jung-kurt/gofpdf"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pixfid/luft/data"
-	"github.com/pixfid/luft/usbid"
+	"github.com/pixfid/luft/usbids"
 	"github.com/thoas/go-funk"
 	"io/fs"
 	"io/ioutil"
@@ -27,6 +27,14 @@ func GetSub(r *regexp.Regexp, s string, i int) string {
 		return r.FindStringSubmatch(s)[i]
 	}
 	return ""
+}
+
+func GetSubs(r *regexp.Regexp, s string, i int) [][]string {
+	match := r.FindAllStringSubmatch(s, -1)
+	if match != nil {
+		return match
+	}
+	return nil
 }
 
 func GetActionType(logLine string) string {
@@ -58,15 +66,12 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 
 	//check by whitelist
 	if params.CheckWl {
-		var tmp []data.Event
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Checking devices by white list}}::green", time.Now().Format(time.Stamp)))
-		for _, event := range filtered {
-			if funk.Contains(whiteList, event.SerialNumber) {
-				event.Trusted = true
+		for i, event := range filtered {
+			if WhiteList.Has(event.SerialNumber) {
+				filtered[i].Trusted = true
 			}
-			tmp = append(tmp, event)
 		}
-		filtered = tmp
 	}
 
 	//filter Untrusted
@@ -76,16 +81,13 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 		}).([]data.Event)
 	}
 
-	var tmp []data.Event
-	for _, event := range filtered {
-		manufactStr, productStr := usbid.FindDevice(event.Vid, event.Pid)
-		event.ManufacturerName = manufactStr
+	for i, event := range filtered {
+		manufactStr, productStr := usbids.FindDevice(event.Vid, event.Pid)
+		filtered[i].ManufacturerName = manufactStr
 		if len(productStr) != 0 {
-			event.ProductName = productStr
+			filtered[i].ProductName = productStr
 		}
-		tmp = append(tmp, event)
 	}
-	filtered = tmp
 
 	sort.Slice(filtered, func(i, j int) bool {
 		switch params.SortBy {
@@ -138,16 +140,6 @@ func ExpandPath(path string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(usr.HomeDir, path[1:]), nil
-}
-
-func ClearLogs(list []string) []string {
-	var filtered []string
-	for _, s := range list {
-		if !strings.Contains(s, "parsec") {
-			filtered = append(filtered, s)
-		}
-	}
-	return filtered
 }
 
 func PrintEvents(e []data.Event) {

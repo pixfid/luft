@@ -82,8 +82,6 @@ TODO
 Credits & References
 ==========
 
-* [usbrip](https://github.com/snovvcrash/usbrip)
-* [google/gousb](https://github.com/google/gousb)
 * [cfmt](github.com/i582/cfmt)
 * [commando](github.com/thatisuday/commando)
 * [tablewriter](github.com/olekukonko/tablewriter)

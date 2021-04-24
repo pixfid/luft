@@ -23,13 +23,14 @@ func CollectLogs(params data.ParseParams) []string {
 	}
 
 	err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if strings.Contains(path, "syslog") {
+		switch {
+		case strings.Contains(path, "syslog"):
 			files = append(files, path)
-		} else if strings.Contains(path, "messages") {
+		case strings.Contains(path, "messages"):
 			files = append(files, path)
-		} else if strings.Contains(path, "kern") {
+		case strings.Contains(path, "kern"):
 			files = append(files, path)
-		} else if strings.Contains(path, "daemon") {
+		case strings.Contains(path, "daemon"):
 			files = append(files, path)
 		}
 		return nil
@@ -147,7 +148,8 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 				interrupted = false
 
 			} else if !interrupted {
-				if link == 2 {
+				switch {
+				case link == 2:
 					prod := utils.GetSub(reProd, event.LogLine, 1)
 					if prod == "" {
 						interrupted = true
@@ -155,7 +157,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						allEvents[curr].ProductName = prod
 						link = 3
 					}
-				} else if link == 3 {
+				case link == 3:
 					manufact := utils.GetSub(reManufact, event.LogLine, 1)
 					if manufact == "" {
 						interrupted = true
@@ -163,7 +165,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						allEvents[curr].ManufacturerName = manufact
 						link = 4
 					}
-				} else if link == 4 {
+				case link == 4:
 					serial := utils.GetSub(reSerial, event.LogLine, 1)
 					if serial == "" {
 						interrupted = true
@@ -171,7 +173,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						allEvents[curr].SerialNumber = serial
 						link = 5
 					}
-				} else if link == 5 {
+				case link == 5:
 					storage := utils.GetSub(usStorage, event.LogLine, 1)
 					if storage != "" {
 						allEvents[curr].IsMassStorage = true
