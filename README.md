@@ -83,6 +83,5 @@ Credits & References
 ==========
 
 * [cfmt](github.com/i582/cfmt)
-* [commando](github.com/thatisuday/commando)
 * [tablewriter](github.com/olekukonko/tablewriter)
 * [gofpdf](github.com/jung-kurt/gofpdf)
