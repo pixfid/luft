@@ -87,3 +87,11 @@ Credits & References
 * [tablewriter](https://github.com/olekukonko/tablewriter)
 * [gofpdf](https://github.com/jung-kurt/gofpdf)
 * [go-flags](https://github.com/umputun/go-flags)
+
+## Contact
+
+For any questions — tg: `@cffaedfe`.
+
+## License
+
+This project is under the **MIT License**. See the [LICENSE](https://github.com/pixfid/luft/blob/master/LICENSE) file for the full license text.
