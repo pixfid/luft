@@ -19,7 +19,7 @@ func CollectLogs(params data.ParseParams) []string {
 	path, err := utils.ExpandPath(params.LogPath)
 
 	if err != nil {
-		panic(err)
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filed expand path: %s}}::red", time.Now().Format(time.Stamp), path))
 	}
 
 	err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {

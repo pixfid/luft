@@ -3,7 +3,6 @@ module github.com/pixfid/luft
 go 1.16
 
 require (
-	github.com/google/gousb v1.1.1
 	github.com/i582/cfmt v1.1.0
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/olekukonko/tablewriter v0.0.5
