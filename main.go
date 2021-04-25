@@ -38,7 +38,7 @@ var opts struct {
 
 	External struct {
 		Whitelist string `short:"W" env:"WHITELIST" long:"whitelist" description:"whitelist path"`
-		UsbIds    string `short:"U" env:"USBIDS" long:"usbids" description:"usbids path"`
+		UsbIds    string `short:"U" env:"USBIDS" long:"usbids" description:"usbids path" default:"/var/lib/usbutils/usb.ids"`
 	}
 
 	Events struct {
@@ -54,14 +54,6 @@ var opts struct {
 			Password string `short:"P" long:"password" env:"PASSWORD" description:"password"`
 		} `group:"remote" namespace:"remote" env-namespace:"REMOTE"`
 	} `group:"events" namespace:"events" env-namespace:"EVENTS"`
-}
-
-func parseLocalEvents(pp data.ParseParams) {
-	parsers.LocalEvents(pp)
-}
-
-func parseRemoteEvents(pp data.ParseParams) {
-	parsers.RemoteEvents(pp)
 }
 
 func PrintBanner() {
@@ -85,7 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var pp = data.ParseParams{
+	var parseParams = data.ParseParams{
 		LogPath:            opts.Events.Path,
 		WlPath:             opts.External.Whitelist,
 		OnlyMass:           opts.MassStorage,
@@ -120,14 +112,27 @@ func main() {
 	if opts.ExtUsbIds {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Using external usb.ids}}::green", time.Now().Format(time.Stamp)))
 		if _, err := os.Stat(opts.External.UsbIds); !os.IsNotExist(err) {
-			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] External usb.ids loaded}}::green", time.Now().Format(time.Stamp)))
 			err := usbids.LoadFromFile(opts.External.UsbIds)
 			if err != nil {
-				_, _ = cfmt.Println("{{Error loading external usb.ids will be using embedded}}::red")
+				_, _ = cfmt.Println("{{Try load another one usb.ids}}::green")
+				err := usbids.LoadFromFiles()
+				if err != nil {
+					_, _ = cfmt.Println("{{Can`t loading any usb.ids}}::red")
+				}
 			}
 		} else {
-			_, _ = cfmt.Println("{{Error loading external usb.ids will be using embedded}}::red")
+			_, _ = cfmt.Println("{{Try load another one usb.ids}}::green")
+			err := usbids.LoadFromFiles()
+			if err != nil {
+				_, _ = cfmt.Println("{{Can`t loading any usb.ids}}::red")
+			}
 		}
+	} else {
+		err := usbids.LoadFromFiles()
+		if err != nil {
+			_, _ = cfmt.Println("{{Can`t loading any usb.ids}}::red")
+		}
+
 	}
 
 	if opts.Untrusted {
@@ -137,10 +142,10 @@ func main() {
 	switch opts.Events.Source {
 	case "local":
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered events}}::green", time.Now().Format(time.Stamp)))
-		parseLocalEvents(pp)
+		parsers.LocalEvents(parseParams)
 	case "remote":
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered events}}::green", time.Now().Format(time.Stamp)))
-		parseRemoteEvents(pp)
+		parsers.RemoteEvents(parseParams)
 	case "database":
 	}
 
