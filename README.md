@@ -28,7 +28,7 @@ Application Options:
   -c, --check                                 check devices for whitelist [$CHECK]
   -E, --extusbids                             external usbids data base [$EXTUSBIDS]
   -W, --whitelist=                            whitelist path [$WHITELIST]
-  -U, --usbids=                               usbids path [$USBIDS]
+  -U, --usbids=                               usbids path (default: /var/lib/usbutils/usb.ids) [$USBIDS]
 
 events:
   -S, --events.source=[local|remote|database] events target
@@ -45,6 +45,7 @@ remote:
 
 Help Options:
   -h, --help                                  Show this help message
+
 
 ```
 
