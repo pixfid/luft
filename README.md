@@ -86,3 +86,4 @@ Credits & References
 * [cfmt](github.com/i582/cfmt)
 * [tablewriter](github.com/olekukonko/tablewriter)
 * [gofpdf](github.com/jung-kurt/gofpdf)
+* [go-flags](github.com/umputun/go-flags)
