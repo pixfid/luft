@@ -100,7 +100,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 	})
 
 	if params.Number != 0 {
-		return filtered[0 : params.Number+1]
+		return filtered[0:params.Number]
 	}
 	return filtered
 }
