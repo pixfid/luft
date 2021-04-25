@@ -83,6 +83,7 @@ TODO
 Credits & References
 ==========
 
-* [cfmt](github.com/i582/cfmt)
-* [tablewriter](github.com/olekukonko/tablewriter)
-* [gofpdf](github.com/jung-kurt/gofpdf)
+* [cfmt](https://github.com/i582/cfmt)
+* [tablewriter](https://github.com/olekukonko/tablewriter)
+* [gofpdf](https://github.com/jung-kurt/gofpdf)
+* [go-flags](https://github.com/umputun/go-flags)
