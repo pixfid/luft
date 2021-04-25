@@ -10,42 +10,17 @@ import (
 )
 
 var (
-	vendors                 = map[string]*Vendor{}
-	classes                 = map[string]*DeviceClass{}
-	audioClassTerminalTypes = map[string]*AudioClassTerminalType{}
-	videoClassTerminalTypes = map[string]*VideClassTerminalType{}
-	hids                    = map[string]*HID{}
+	vendors = map[string]*Vendor{}
 
-	version            = regexp.MustCompile(`Version: (\d{4}.\d{2}.\d{2})`)
-	date               = regexp.MustCompile(`Date:\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
-	vendorLine         = regexp.MustCompile(`^([[:xdigit:]]{4})\s{2}(.+)$`)
-	deviceLine         = regexp.MustCompile(`\t([[:xdigit:]]{4})\s{2}(.+)$`)
-	deviceClassLine    = regexp.MustCompile(`^(C)\s+([[:xdigit:]]{2})\s+(.*)`)
-	deviceSubClassLine = regexp.MustCompile(`^\t([[:xdigit:]]{2})\s+(.*)`)
-	deviceProtocolLine = regexp.MustCompile(`^\t\t([[:xdigit:]]{2})\s+(.*)`)
-	actTypeLine        = regexp.MustCompile(`^(AT)\s+([[:xdigit:]]{4})\s+(.*)`)
-	vctTypeLine        = regexp.MustCompile(`^(VT)\s+(\d{4})\s+(.*)`)
-	hidLine            = regexp.MustCompile(`^(HID)\s+([[:xdigit:]]{2})\s+(.*)`)
+	version    = regexp.MustCompile(`Version: (\d{4}.\d{2}.\d{2})`)
+	date       = regexp.MustCompile(`Date:\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
+	vendorLine = regexp.MustCompile(`^([[:xdigit:]]{4})\s{2}(.+)$`)
+	deviceLine = regexp.MustCompile(`\t([[:xdigit:]]{4})\s{2}(.+)$`)
 
 	Ids     = []string{"/var/lib/usbutils/usb.ids", "/usr/share/hwdata/usb.ids", "usb.ids"}
 	Version = ""
 	Date    = ""
 )
-
-type HID struct {
-	ID   string
-	Name string
-}
-
-type AudioClassTerminalType struct {
-	ID   string
-	Name string
-}
-
-type VideClassTerminalType struct {
-	ID   string
-	Name string
-}
 
 type Vendor struct {
 	ID     string
@@ -54,29 +29,6 @@ type Vendor struct {
 }
 
 type Device struct {
-	ID        string
-	Name      string
-	Interface map[string]*Interface
-}
-
-type Interface struct {
-	ID   string
-	Name string
-}
-
-type DeviceClass struct {
-	ID             string
-	Name           string
-	DeviceSubClass map[string]*DeviceSubClass
-}
-
-type DeviceSubClass struct {
-	ID             string
-	Name           string
-	DeviceProtocol map[string]*DeviceProtocol
-}
-
-type DeviceProtocol struct {
 	ID   string
 	Name string
 }
@@ -104,28 +56,8 @@ func LoadFromFile(path string) error {
 		vendors[vendor.ID] = &vendor
 	}
 
-	emitClass := func(classes map[string]*DeviceClass, class DeviceClass) {
-		classes[class.ID] = &class
-	}
-
-	emitActt := func(actts map[string]*AudioClassTerminalType, actt AudioClassTerminalType) {
-		actts[actt.ID] = &actt
-	}
-
-	emitVctt := func(vctts map[string]*VideClassTerminalType, vctt VideClassTerminalType) {
-		vctts[vctt.ID] = &vctt
-	}
-
-	emitHID := func(hids map[string]*HID, hid HID) {
-		hids[hid.ID] = &hid
-	}
-
 	var currVendor *Vendor
 	var prevVendor *Vendor
-
-	var currClass *DeviceClass
-	var prevClass *DeviceClass
-	var classId string
 
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
@@ -157,51 +89,8 @@ func LoadFromFile(path string) error {
 					Name: result[2],
 				}
 			}
-		} else if result := deviceClassLine.FindStringSubmatch(line); len(result) != 0 {
-			if class := prevClass; class != nil {
-				emitClass(classes, *class)
-			}
-			currClass = &DeviceClass{
-				ID:             result[2],
-				Name:           result[3],
-				DeviceSubClass: map[string]*DeviceSubClass{},
-			}
-			prevClass = currClass
-		} else if result := deviceSubClassLine.FindStringSubmatch(line); len(result) != 0 {
-			if currClass := currClass; currClass != nil {
-				currClass.DeviceSubClass[result[1]] = &DeviceSubClass{
-					ID:             result[1],
-					Name:           result[2],
-					DeviceProtocol: map[string]*DeviceProtocol{},
-				}
-				classId = result[1]
-			}
-		} else if result := deviceProtocolLine.FindStringSubmatch(line); len(result) != 0 {
-			if currClass := currClass; currClass != nil {
-				if currentSubClass := currClass.DeviceSubClass[classId]; currentSubClass != nil {
-					currentSubClass.DeviceProtocol[result[1]] = &DeviceProtocol{
-						ID:   result[1],
-						Name: result[2],
-					}
-				}
-			}
-		} else if result := actTypeLine.FindStringSubmatch(line); len(result) != 0 { //List of Audio Class Terminal Types
-			emitActt(audioClassTerminalTypes, AudioClassTerminalType{
-				ID:   result[2],
-				Name: result[3],
-			})
-		} else if result := vctTypeLine.FindStringSubmatch(line); len(result) != 0 { //List of Video Class Terminal Types
-			emitVctt(videoClassTerminalTypes, VideClassTerminalType{
-				ID:   result[2],
-				Name: result[3],
-			})
-		} else if result := hidLine.FindStringSubmatch(line); len(result) != 0 { //List of HID Descriptor Types
-			emitHID(hids, HID{
-				ID:   result[2],
-				Name: result[3],
-			})
 		} else {
-			continue
+			break
 		}
 	}
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] usb.ids loaded from: %s, Version: %s, Date: %s}}::green", time.Now().Format(time.Stamp), path, Version, Date))
