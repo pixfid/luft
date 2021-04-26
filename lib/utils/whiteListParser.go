@@ -1,43 +1,61 @@
 package utils
 
 import (
+	"github.com/i582/cfmt"
 	"io/ioutil"
-	"log"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
-var WhiteList WhiteListCache
+var (
+	whiteListRegex = regexp.MustCompile(`\S+"(?P<serial>.*)"\S+"(?P<flag>.*)"\s#(?P<comment>.*)`)
+	wl             = map[string]*Serial{}
+)
 
-type WhiteListCache struct {
-	cache []string
+type Serial struct {
+	Serial     string
+	IsIgnore   bool
+	Commentary string
 }
 
-func (c *WhiteListCache) Add(serial string) {
-	c.cache = append(c.cache, serial)
+func IsInWhiteList(serial string) bool {
+	return wl[serial] != nil
 }
 
-func (c *WhiteListCache) Has(serial string) bool {
-	for _, innerSerial := range c.cache {
-		if innerSerial == serial {
-			return true
-		}
-	}
-
-	return false
+func WhiteListSerialInfo(serial string) *Serial {
+	return wl[serial]
 }
 
-func ParseWL(wlPath string) error {
-	cache := WhiteListCache{}
-	reVid := regexp.MustCompile(`ATTRS{serial}=="(.*?)"`)
+func LoadWhiteList(wlPath string) error {
 	content, err := ioutil.ReadFile(wlPath)
 	if err != nil {
-		log.Fatal(err)
-	}
-	result := GetSubs(reVid, string(content), 1)
-	for i := range result {
-		cache.Add(result[i][1])
+		return err
 	}
 
-	WhiteList = cache
-	return err
+	return parseWhiteList(string(content), whiteListRegex)
+}
+
+func parseWhiteList(fileContents string, whiteListRegex *regexp.Regexp) error {
+
+	emitSerial := func(wl map[string]*Serial, serial Serial) {
+		wl[serial.Serial] = &serial
+	}
+
+	re := whiteListRegex.FindAllStringSubmatch(fileContents, -1)
+
+	if re := re; re != nil {
+		for _, fields := range re {
+			result, err := strconv.ParseBool(fields[2])
+			if err != nil {
+				_, _ = cfmt.Println(cfmt.Sprintf("{{Error while parse whitelist record}}::red"))
+			}
+			emitSerial(wl, Serial{
+				Serial:     fields[1],
+				IsIgnore:   result,
+				Commentary: strings.TrimSpace(fields[3]),
+			})
+		}
+	}
+	return nil
 }

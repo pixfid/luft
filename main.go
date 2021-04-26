@@ -97,12 +97,12 @@ func main() {
 
 	if opts.Check {
 		if _, err := os.Stat(opts.External.Whitelist); !os.IsNotExist(err) {
-			err := utils.ParseWL(opts.External.Whitelist)
+			err := utils.LoadWhiteList(opts.External.Whitelist)
 			if err != nil {
 				_, _ = cfmt.Println("{{Error loading external whitelist}}::red")
 			}
 		} else {
-			err := utils.ParseWL("/etc/udev/rules.d/99_PDAC_LOCAL_flash.rules")
+			err := utils.LoadWhiteList("/etc/udev/rules.d/99_PDAC_LOCAL_flash.rules")
 			if err != nil {
 				_, _ = cfmt.Println("{{Error loading external whitelist}}::red")
 			}

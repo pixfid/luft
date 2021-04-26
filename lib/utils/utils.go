@@ -68,7 +68,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 	if params.CheckWl {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Checking devices by white list}}::green", time.Now().Format(time.Stamp)))
 		for i, event := range filtered {
-			if WhiteList.Has(event.SerialNumber) {
+			if IsInWhiteList(event.SerialNumber) {
 				filtered[i].Trusted = true
 			}
 		}
