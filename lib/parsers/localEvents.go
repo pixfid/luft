@@ -1,11 +1,12 @@
 package parsers
 
 import (
+	"os"
+	"time"
+
 	"github.com/i582/cfmt"
 	"github.com/pixfid/luft/data"
 	"github.com/pixfid/luft/lib/utils"
-	"os"
-	"time"
 )
 
 func LocalEvents(params data.ParseParams) {
@@ -19,11 +20,12 @@ func LocalEvents(params data.ParseParams) {
 
 	recordTypes := ParseFiles(list)
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Found %d events records}}::green", time.Now().Format(time.Stamp), len(recordTypes)))
+
 	events := CollectEventsData(recordTypes)
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Parsed %d events}}::green", time.Now().Format(time.Stamp), len(events)))
+
 	events = utils.RemoveDuplicates(events)
 	events = utils.FilterEvents(params, events)
-
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filter and remove duplicates complete, %d clear events found}}::green", time.Now().Format(time.Stamp), len(events)))
 
 	if params.Export {

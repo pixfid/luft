@@ -43,12 +43,7 @@ func LoadFromFiles() error {
 	return nil
 }
 
-func LoadFromFile(path string) error {
-	file, err := os.Open(path)
-
-	if err != nil {
-		return err
-	}
+func ParseUsbIDs(file *os.File) error {
 
 	scanner := bufio.NewScanner(file)
 
@@ -93,9 +88,24 @@ func LoadFromFile(path string) error {
 			break
 		}
 	}
-	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] usb.ids loaded from: %s, Version: %s, Date: %s}}::green", time.Now().Format(time.Stamp), path, Version, Date))
+
+	if scanner.Err() != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{Error while parse usb.ids}}::red"))
+	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] usb.ids loaded from: %s, Version: %s, Date: %s}}::green", time.Now().Format(time.Stamp), file.Name(), Version, Date))
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] usb.ids %d vendors load}}::green", time.Now().Format(time.Stamp), len(vendors)))
 	return nil
+}
+
+func LoadFromFile(path string) error {
+	file, err := os.Open(path)
+
+	if err != nil {
+		return err
+	}
+
+	return ParseUsbIDs(file)
 }
 
 func FindDevice(vid, pid string) (string, string) {
