@@ -28,13 +28,14 @@ var opts struct {
 		} `group:"ids" namespace:"ids" env-namespace:"IDS"`
 	*/
 
-	MassStorage bool   `short:"m" long:"masstorage" env:"MASSTORAGE" description:"show only mass storage devices"`
-	Untrusted   bool   `short:"u" long:"untrusted" env:"UNTRUSTED" description:"show only untrusted devices"`
-	Number      int    `short:"n" long:"number" env:"NUMBER" description:"number of events to show"`
-	Sort        string `short:"s" long:"sort" env:"SORT" choice:"asc" choice:"desc" description:"sort events" default:"asc"`
-	Export      bool   `short:"e" long:"export" env:"EXPORT" description:"export events"`
-	Check       bool   `short:"c" long:"check" env:"CHECK" description:"check devices for whitelist"`
-	ExtUsbIds   bool   `short:"E" long:"extusbids" env:"EXTUSBIDS" description:"external usbids data base"`
+	MassStorage      bool   `short:"m" long:"masstorage" env:"MASSTORAGE" description:"show only mass storage devices"`
+	Untrusted        bool   `short:"u" long:"untrusted" env:"UNTRUSTED" description:"show only untrusted devices"`
+	Number           int    `short:"n" long:"number" env:"NUMBER" description:"number of events to show"`
+	Sort             string `short:"s" long:"sort" env:"SORT" choice:"asc" choice:"desc" description:"sort events" default:"asc"`
+	Export           bool   `short:"e" long:"export" env:"EXPORT" description:"export events"`
+	CheckByWhiteList bool   `short:"c" long:"check" env:"CHECK" description:"check devices for whitelist"`
+	ExtUsbIds        bool   `short:"E" long:"extusbids" env:"EXTUSBIDS" description:"external usbids data base"`
+	Verbose          bool   `short:"v" long:"verbose" env:"VERBOSE" description:"Makes luft verbose during the operation."`
 
 	External struct {
 		Whitelist string `short:"W" env:"WHITELIST" long:"whitelist" description:"whitelist path"`
@@ -70,6 +71,7 @@ func main() {
 
 	p := flags.NewParser(&opts, flags.PrintErrors|flags.PassDoubleDash|flags.HelpFlag)
 	p.SubcommandsOptional = true
+
 	if _, err := p.Parse(); err != nil {
 		if err.(*flags.Error).Type != flags.ErrHelp {
 			log.Printf("[ERROR] cli error: %v", err)
@@ -81,7 +83,7 @@ func main() {
 		LogPath:            opts.Events.Path,
 		WlPath:             opts.External.Whitelist,
 		OnlyMass:           opts.MassStorage,
-		CheckWl:            opts.Check,
+		CheckWl:            opts.CheckByWhiteList,
 		Number:             opts.Number,
 		Export:             opts.Export,
 		Format:             opts.Events.Export.Format,
@@ -92,10 +94,11 @@ func main() {
 		Login:              opts.Events.Remote.Login,
 		Password:           opts.Events.Remote.Password,
 		Port:               opts.Events.Remote.Port,
-		Ip:                 opts.Events.Remote.IP,
+		IP:                 opts.Events.Remote.IP,
+		Verbose:            opts.Verbose,
 	}
 
-	if opts.Check {
+	if opts.CheckByWhiteList {
 		if _, err := os.Stat(opts.External.Whitelist); !os.IsNotExist(err) {
 			err := utils.LoadWhiteList(opts.External.Whitelist)
 			if err != nil {
@@ -132,7 +135,6 @@ func main() {
 		if err != nil {
 			_, _ = cfmt.Println("{{Can`t loading any usb.ids}}::red")
 		}
-
 	}
 
 	if opts.Untrusted {

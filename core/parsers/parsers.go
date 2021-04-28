@@ -6,7 +6,6 @@ import (
 	"github.com/i582/cfmt"
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +15,7 @@ import (
 
 func CollectLogs(params data.ParseParams) []string {
 	var files []string
+
 	path, err := utils.ExpandPath(params.LogPath)
 
 	if err != nil {
@@ -38,26 +38,33 @@ func CollectLogs(params data.ParseParams) []string {
 	if err != nil {
 		panic(err)
 	}
+
 	return files
 }
 
 func parseLine(scanner *bufio.Scanner) []data.LogEvent {
 	r := regexp.MustCompile(`(?:]|:) usb (.*?): `)
 	u := regexp.MustCompile(`(?:]|:) usb-storage (.*?): `)
+	d := regexp.MustCompile(`(\w{3,}\s\d{2}\s\d{2}:\d{2}:\d{2})`)
+
 	var logEvents []data.LogEvent
+
 	buf := make([]byte, 0, 64*1024)
+
 	scanner.Buffer(buf, 1024*1024)
 
 	for scanner.Scan() {
-		line := scanner.Text()
-		if r.MatchString(line) || u.MatchString(line) {
-			toTime := utils.TimeStampToTime(line[:15])
-			eventType := utils.GetActionType(line)
-			if eventType != "" {
+		logLine := scanner.Text()
+		if r.MatchString(logLine) || u.MatchString(logLine) {
+			logTime := utils.Submatch(d, logLine, 1)
+			dateTime := utils.TimeStampToTime(logTime)
+			eventType := utils.GetActionType(logLine)
+
+			if eventType != data.Unknown {
 				logEvents = append(logEvents, data.LogEvent{
-					Date:       toTime,
+					Date:       dateTime,
 					ActionType: eventType,
-					LogLine:    line,
+					LogLine:    logLine,
 				})
 			}
 		}
@@ -85,11 +92,12 @@ func parseGzipped(path string) []data.LogEvent {
 	gz, err := gzip.NewReader(file)
 
 	if err != nil {
-		log.Fatal(err)
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cannot create gzip reader: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
 	}
 
 	defer file.Close()
 	defer gz.Close()
+
 	return parseLine(bufio.NewScanner(gz))
 }
 
@@ -108,7 +116,7 @@ func ParseFiles(files []string) []data.LogEvent {
 	return recordTypes
 }
 
-//CollectEventsData collect data from events logs
+//CollectEventsData collect data from events logs.
 func CollectEventsData(events []data.LogEvent) []data.Event {
 	var curr = -1
 	var link int
@@ -125,13 +133,14 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 	reHost := regexp.MustCompile(`(.*:\d{2}\s)(.*) (.*:\s\[)`)
 
 	for _, event := range events {
-		if event.ActionType == "c" {
+		if event.ActionType == data.Connected {
 			switch {
 			case strings.Contains(event.LogLine, "New USB device found, "):
-				host := utils.GetSub(reHost, event.LogLine, 2)
-				vid := utils.GetSub(reVid, event.LogLine, 1)
-				pid := utils.GetSub(rePid, event.LogLine, 1)
-				port := utils.GetSub(rePort, event.LogLine, 1)
+				host := utils.Submatch(reHost, event.LogLine, 2)
+				vid := utils.Submatch(reVid, event.LogLine, 1)
+				pid := utils.Submatch(rePid, event.LogLine, 1)
+				port := utils.Submatch(rePort, event.LogLine, 1)
+
 				allEvents = append(allEvents, data.Event{
 					ConnectedTime:     event.Date,
 					Host:              host,
@@ -143,13 +152,15 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 					ConnectionPort:    port,
 					DisconnectionTime: time.Now(),
 				})
+
 				curr++
 				link = 2
 				interrupted = false
+
 			case !interrupted:
 				switch {
 				case link == 2:
-					prod := utils.GetSub(reProduct, event.LogLine, 1)
+					prod := utils.Submatch(reProduct, event.LogLine, 1)
 					if prod == "" {
 						interrupted = true
 					} else {
@@ -157,7 +168,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						link = 3
 					}
 				case link == 3:
-					manufacture := utils.GetSub(reManufacture, event.LogLine, 1)
+					manufacture := utils.Submatch(reManufacture, event.LogLine, 1)
 					if manufacture == "" {
 						interrupted = true
 					} else {
@@ -165,7 +176,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						link = 4
 					}
 				case link == 4:
-					serial := utils.GetSub(reSerial, event.LogLine, 1)
+					serial := utils.Submatch(reSerial, event.LogLine, 1)
 					if serial == "" {
 						interrupted = true
 					} else {
@@ -173,7 +184,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						link = 5
 					}
 				case link == 5:
-					storage := utils.GetSub(usStorage, event.LogLine, 1)
+					storage := utils.Submatch(usStorage, event.LogLine, 1)
 					if storage != "" {
 						allEvents[curr].IsMassStorage = true
 					}
@@ -182,8 +193,8 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 			default:
 				continue
 			}
-		} else if event.ActionType == "d" {
-			port := utils.GetSub(rePort, event.LogLine, 1)
+		} else if event.ActionType == data.Disconnected {
+			port := utils.Submatch(rePort, event.LogLine, 1)
 			if port != "" {
 				for i := range allEvents {
 					if allEvents[i].ConnectionPort == port {

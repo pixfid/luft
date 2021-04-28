@@ -23,7 +23,7 @@ func RemoteEvents(params data.ParseParams) {
 		},
 		HostKeyCallback: utils.TrustedHostKeyCallback(""),
 	}
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", params.Ip, params.Port), config)
+	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", params.IP, params.Port), config)
 	if err != nil {
 		_, _ = cfmt.Println("{{Failed to dial}}::red")
 		return

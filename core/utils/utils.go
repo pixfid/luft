@@ -21,29 +21,33 @@ import (
 	"time"
 )
 
-func GetSub(r *regexp.Regexp, s string, i int) string {
-	match := r.FindStringSubmatch(s)
-	if match != nil {
-		return r.FindStringSubmatch(s)[i]
+func Submatch(r *regexp.Regexp, logLine string, idx int) string {
+	if match := r.FindStringSubmatch(logLine); match != nil {
+		if subMatch := r.FindStringSubmatch(logLine)[idx]; subMatch != "" {
+			return subMatch
+		}
 	}
+
 	return ""
 }
 
-func GetActionType(logLine string) string {
-	if strings.Contains(logLine, "New USB device found") {
-		return "c"
-	} else if strings.Contains(logLine, "Product: ") {
-		return "c"
-	} else if strings.Contains(logLine, "Manufacturer: ") {
-		return "c"
-	} else if strings.Contains(logLine, "SerialNumber: ") {
-		return "c"
-	} else if strings.Contains(logLine, "USB Mass Storage device detected") {
-		return "c"
-	} else if strings.Contains(logLine, "disconnect") {
-		return "d"
+func GetActionType(logLine string) data.ActionType {
+	switch {
+	case strings.Contains(logLine, "New USB device found"):
+		return data.Connected
+	case strings.Contains(logLine, "Product: "):
+		return data.Connected
+	case strings.Contains(logLine, "Manufacturer: "):
+		return data.Connected
+	case strings.Contains(logLine, "SerialNumber: "):
+		return data.Connected
+	case strings.Contains(logLine, "USB Mass Storage device detected"):
+		return data.Connected
+	case strings.Contains(logLine, "disconnect"):
+		return data.Disconnected
 	}
-	return ""
+
+	return data.Unknown
 }
 
 func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
@@ -51,6 +55,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 	//filter only mass devices
 	if params.OnlyMass {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filter only mass storage devices}}::green", time.Now().Format(time.Stamp)))
+
 		filtered = funk.Filter(events, func(event data.Event) bool {
 			return event.IsMassStorage
 		}).([]data.Event)
@@ -59,6 +64,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 	//check by whitelist
 	if params.CheckWl {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Checking devices by white list}}::green", time.Now().Format(time.Stamp)))
+
 		for i, event := range filtered {
 			if IsInWhiteList(event.SerialNumber) {
 				filtered[i].Trusted = true
@@ -68,6 +74,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 
 	//filter Untrusted
 	if params.Untrusted {
+
 		filtered = funk.Filter(filtered, func(event data.Event) bool {
 			return !event.Trusted
 		}).([]data.Event)
@@ -78,6 +85,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 		if len(productStr) != 0 {
 			filtered[i].ProductName = productStr
 		}
+
 		if len(manufactureStr) != 0 {
 			filtered[i].ManufacturerName = manufactureStr
 		}
@@ -96,6 +104,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 	if params.Number != 0 {
 		return filtered[0:params.Number]
 	}
+
 	return filtered
 }
 
@@ -106,6 +115,7 @@ func RemoveDuplicates(events []data.Event) []data.Event {
 			clearEvents = append(clearEvents, event)
 		}
 	}
+
 	return clearEvents
 }
 
@@ -115,12 +125,14 @@ func InSlice(arr []data.Event, val data.Event) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 func TimeStampToTime(timeStampString string) time.Time {
 	layout := "Jan _2 15:04:05"
 	pTime, _ := time.Parse(layout, timeStampString)
+
 	return pTime
 }
 
@@ -133,6 +145,7 @@ func ExpandPath(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return filepath.Join(usr.HomeDir, path[1:]), nil
 }
 
@@ -271,20 +284,20 @@ func savePDF(pdf *gofpdf.Fpdf, fn string) error {
 
 func ExportData(events []data.Event, format string) {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Representation: %s }}::green", time.Now().Format(time.Stamp), format))
-	var data []byte
+	var exportData []byte
 	var fn string
 	switch format {
 	case "json":
 		fn = fmt.Sprintf("events_data.%s", "json")
-		data, _ = json.MarshalIndent(events, "", " ")
+		exportData, _ = json.MarshalIndent(events, "", " ")
 	case "xml":
 		fn = fmt.Sprintf("events_data.%s", "xml")
-		data, _ = xml.MarshalIndent(events, "", " ")
+		exportData, _ = xml.MarshalIndent(events, "", " ")
 	case "pdf":
 		GenerateReport(events, fmt.Sprintf("events_data.%s", "pdf"))
 	}
-	if data != nil {
-		err := ioutil.WriteFile(fn, data, fs.ModePerm)
+	if exportData != nil {
+		err := ioutil.WriteFile(fn, exportData, fs.ModePerm)
 		if err != nil {
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Events exported to: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
 		}

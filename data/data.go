@@ -2,9 +2,17 @@ package data
 
 import "time"
 
+type ActionType int8
+
+const (
+	Connected ActionType = iota
+	Disconnected
+	Unknown
+)
+
 type LogEvent struct {
 	Date       time.Time
-	ActionType string
+	ActionType ActionType
 	LogLine    string
 }
 
@@ -36,7 +44,7 @@ type ParseParams struct {
 	Login              string
 	Password           string
 	Port               string
-	Ip                 string
+	IP                 string
 	Number             int
-	WlData             []string
+	Verbose            bool
 }
