@@ -2,9 +2,9 @@ package main
 
 import (
 	"github.com/i582/cfmt"
+	"github.com/pixfid/luft/core/parsers"
+	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
-	"github.com/pixfid/luft/lib/parsers"
-	"github.com/pixfid/luft/lib/utils"
 	"github.com/pixfid/luft/usbids"
 	"github.com/umputun/go-flags"
 	"log"
@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	ver = "v0.2"
+	ver = "v0.3"
 	url = "https://github.com/pixfid/luft"
 )
 
@@ -38,7 +38,7 @@ var opts struct {
 
 	External struct {
 		Whitelist string `short:"W" env:"WHITELIST" long:"whitelist" description:"whitelist path"`
-		UsbIds    string `short:"U" env:"USBIDS" long:"usbids" description:"usbids path" default:"/var/lib/usbutils/usb.ids"`
+		UsbIds    string `short:"U" env:"USBIDS" long:"usbids" description:"usbids path" default:"/var/core/usbutils/usb.ids"`
 	}
 
 	Events struct {

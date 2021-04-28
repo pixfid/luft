@@ -29,14 +29,6 @@ func GetSub(r *regexp.Regexp, s string, i int) string {
 	return ""
 }
 
-func GetSubs(r *regexp.Regexp, s string, i int) [][]string {
-	match := r.FindAllStringSubmatch(s, -1)
-	if match != nil {
-		return match
-	}
-	return nil
-}
-
 func GetActionType(logLine string) string {
 	if strings.Contains(logLine, "New USB device found") {
 		return "c"
@@ -82,10 +74,12 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 	}
 
 	for i, event := range filtered {
-		manufactStr, productStr := usbids.FindDevice(event.Vid, event.Pid)
-		filtered[i].ManufacturerName = manufactStr
+		manufactureStr, productStr := usbids.FindDevice(event.Vid, event.Pid)
 		if len(productStr) != 0 {
 			filtered[i].ProductName = productStr
+		}
+		if len(manufactureStr) != 0 {
+			filtered[i].ManufacturerName = manufactureStr
 		}
 	}
 
@@ -144,16 +138,16 @@ func ExpandPath(path string) (string, error) {
 
 func PrintEvents(e []data.Event) {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Connected", "Host", "VID", "PID", "Product", "Manufacturer", "Serial Number"}) //, "Port", "Disconnected"})
+	table.SetHeader([]string{"Connected", "Host", "VID", "PID", "Manufacturer", "Product", "Serial Number"}) //, "Port", "Disconnected"})
 
 	table.SetColumnColor(
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiGreenColor}, //connection date
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlackColor},   //host
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlackColor},   //vid
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlackColor},   //pid
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlackColor},   //product
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlackColor},   //manufacturer
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},   //serial
+		tablewriter.Colors{tablewriter.Normal, tablewriter.FgGreenColor}, //connection date
+		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //host
+		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //vid
+		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //pid
+		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //product
+		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //manufacturer
+		tablewriter.Colors{tablewriter.Normal, tablewriter.FgHiRedColor}, //serial
 		//tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiWhiteColor}, //port
 		//tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},   //disconnected
 	)
@@ -165,30 +159,27 @@ func PrintEvents(e []data.Event) {
 				event.Host,
 				event.Vid,
 				event.Pid,
-				event.ProductName,
 				event.ManufacturerName,
+				event.ProductName,
 				event.SerialNumber,
 				//event.Port,
 				//event.Disconn
 			},
 				[]tablewriter.Colors{
-					{tablewriter.Bold, tablewriter.FgHiGreenColor}, //connection date
-					{tablewriter.Bold, tablewriter.FgBlackColor},   //host
-					{tablewriter.Bold, tablewriter.FgBlackColor},   //vid
-					{tablewriter.Bold, tablewriter.FgBlackColor},   //pid
-					{tablewriter.Bold, tablewriter.FgBlackColor},   //product
-					{tablewriter.Bold, tablewriter.FgBlackColor},   //manufacturer
-					{tablewriter.Bold, tablewriter.FgHiGreenColor}, //serial
+					{tablewriter.Normal, tablewriter.FgGreenColor}, //connection date
+					{tablewriter.Normal, tablewriter.FgWhiteColor}, //host
+					{tablewriter.Normal, tablewriter.FgWhiteColor}, //vid
+					{tablewriter.Normal, tablewriter.FgWhiteColor}, //pid
+					{tablewriter.Normal, tablewriter.FgWhiteColor}, //product
+					{tablewriter.Normal, tablewriter.FgWhiteColor}, //manufacturer
+					{tablewriter.Normal, tablewriter.FgGreenColor}, //serial
 					//{tablewriter.Bold, tablewriter.FgHiWhiteColor}, //port
 					//{tablewriter.Bold, tablewriter.FgHiRedColor},   //disconnected
 				})
 		} else {
-			table.Append([]string{event.ConnectedTime.Format("Jan _2 15:04:05"), event.Host, event.Vid, event.Pid, event.ProductName, event.ManufacturerName, event.SerialNumber}) //event.Port, event.Disconn})
+			table.Append([]string{event.ConnectedTime.Format("Jan _2 15:04:05"), event.Host, event.Vid, event.Pid, event.ManufacturerName, event.ProductName, event.SerialNumber}) //event.Port, event.Disconn})
 		}
 	}
-	table.SetColumnSeparator("║")
-	table.SetRowSeparator("═")
-	table.SetCenterSeparator("╬")
 
 	table.SetBorder(true) // Set Border to false
 	table.SetAutoMergeCells(false)
@@ -237,8 +228,8 @@ func header(pdf *gofpdf.Fpdf) *gofpdf.Fpdf {
 	pdf.CellFormat(colWidths["H"], rowHeight, "HOST", "1", 0, "", true, 0, "")
 	pdf.CellFormat(colWidths["V"], rowHeight, "VID", "1", 0, "", true, 0, "")
 	pdf.CellFormat(colWidths["P"], rowHeight, "PID", "1", 0, "", true, 0, "")
-	pdf.CellFormat(colWidths["PR"], rowHeight, "PRODUCT", "1", 0, "", true, 0, "")
 	pdf.CellFormat(colWidths["M"], rowHeight, "MANUFACTURER", "1", 0, "", true, 0, "")
+	pdf.CellFormat(colWidths["PR"], rowHeight, "PRODUCT", "1", 0, "", true, 0, "")
 	pdf.CellFormat(colWidths["S"], rowHeight, "SERIAL NUMBER", "1", 0, "", true, 0, "")
 	return pdf
 }

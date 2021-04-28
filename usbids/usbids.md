@@ -1,4 +1,4 @@
-# USB.IDS REGEXPS
+# USB.IDS REGEX
 
 ### Version usb.ids
 ```Version: (\d{4}.\d{2}.\d{2})```

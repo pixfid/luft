@@ -6,11 +6,10 @@ import (
 	"compress/gzip"
 	"fmt"
 	"github.com/i582/cfmt"
+	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
-	"github.com/pixfid/luft/lib/utils"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
-	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -26,31 +25,32 @@ func RemoteEvents(params data.ParseParams) {
 	}
 	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", params.Ip, params.Port), config)
 	if err != nil {
-		_, _ = cfmt.Println("{{Failed to dial!}}::red")
+		_, _ = cfmt.Println("{{Failed to dial}}::red")
 		return
 	}
 
-	hostName := func() string {
+	hostName := func(cmd string) string {
 		session, _ := conn.NewSession()
 		defer session.Close()
 
 		var stdoutBuf bytes.Buffer
 		session.Stdout = &stdoutBuf
-		err := session.Run("hostname -f")
+		err := session.Run(cmd)
 		if err != nil {
-			_, _ = cfmt.Println("{{Failed to exec command!}}::red")
+			_, _ = cfmt.Println("{{Failed to exec command}}::red")
 		}
-		return stdoutBuf.String()
+		return strings.TrimSuffix(stdoutBuf.String(), "\n")
 	}
 
 	client, err := sftp.NewClient(conn)
 	if err != nil {
-		_, _ = cfmt.Println("{{Failed to create client!}}::red")
+		_, _ = cfmt.Println("{{Failed to create client}}::red")
 	}
 	// Close connection
 	defer client.Close()
 
-	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Starting on: }}::green {{%s}}::red", time.Now().Format(time.Stamp), hostName()))
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Starting on: }}::green {{%s}}::red", time.Now().Format(time.Stamp), hostName(`hostname -f`)))
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] User login: }}::green {{%s}}::red", time.Now().Format(time.Stamp), hostName(`who | grep " :0" | cut -d " " -f1`)))
 
 	readFile := func(path []string, client *sftp.Client) {
 
@@ -62,13 +62,13 @@ func RemoteEvents(params data.ParseParams) {
 				file, err := client.Open(s)
 
 				if err != nil {
-					log.Fatal(err)
+					_, _ = cfmt.Println("{{Failed to open file}}::red")
 				}
 
 				gz, err := gzip.NewReader(file)
 
 				if err != nil {
-					log.Fatal(err)
+					_, _ = cfmt.Println("{{Failed to create Reader}}::red")
 				}
 
 				defer file.Close()
@@ -78,7 +78,7 @@ func RemoteEvents(params data.ParseParams) {
 			} else {
 				file, err := client.Open(s)
 				if err != nil {
-					log.Fatal(err)
+					_, _ = cfmt.Println("{{Failed to open file}}::red")
 				}
 
 				defer file.Close()
@@ -90,7 +90,7 @@ func RemoteEvents(params data.ParseParams) {
 			recordTypes = append(recordTypes, parseLine(scanner)...)
 
 			if err := scanner.Err(); err != nil {
-				log.Fatal(err)
+				_, _ = cfmt.Println(cfmt.Sprintf("{{Failed to %s }}::red", err.Error()))
 			}
 		}
 

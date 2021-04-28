@@ -5,13 +5,14 @@ import (
 	"time"
 
 	"github.com/i582/cfmt"
+	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
-	"github.com/pixfid/luft/lib/utils"
 )
 
 func LocalEvents(params data.ParseParams) {
+	path, _ := utils.ExpandPath(params.LogPath)
 	hostName, _ := os.Hostname()
-	if _, err := os.Stat(params.LogPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Log directory missing: }}::red", time.Now().Format(time.Stamp)))
 	}
 	list := CollectLogs(params)

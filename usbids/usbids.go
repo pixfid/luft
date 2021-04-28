@@ -17,7 +17,7 @@ var (
 	vendorLine = regexp.MustCompile(`^([[:xdigit:]]{4})\s{2}(.+)$`)
 	deviceLine = regexp.MustCompile(`\t([[:xdigit:]]{4})\s{2}(.+)$`)
 
-	Ids     = []string{"/var/lib/usbutils/usb.ids", "/usr/share/hwdata/usb.ids", "usb.ids"}
+	Ids     = []string{"/var/core/usbutils/usb.ids", "/usr/share/hwdata/usb.ids", "usb.ids"}
 	Version = ""
 	Date    = ""
 )

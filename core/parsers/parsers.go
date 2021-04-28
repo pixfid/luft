@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"compress/gzip"
 	"github.com/i582/cfmt"
+	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
-	"github.com/pixfid/luft/lib/utils"
 	"log"
 	"os"
 	"path/filepath"
@@ -100,8 +100,6 @@ func ParseFiles(files []string) []data.LogEvent {
 		switch filepath.Ext(file) {
 		case ".gz":
 			recordTypes = append(recordTypes, parseGzipped(file)...)
-		case ".log":
-			recordTypes = append(recordTypes, parseUGzipped(file)...)
 		default:
 			recordTypes = append(recordTypes, parseUGzipped(file)...)
 		}
@@ -110,6 +108,7 @@ func ParseFiles(files []string) []data.LogEvent {
 	return recordTypes
 }
 
+//CollectEventsData collect data from events logs
 func CollectEventsData(events []data.LogEvent) []data.Event {
 	var curr = -1
 	var link int
@@ -118,19 +117,20 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 
 	reVid := regexp.MustCompile(`idVendor=(\w+)`)
 	rePid := regexp.MustCompile(`idProduct=(\w+)`)
-	reProd := regexp.MustCompile(`Product: (.*?$)`)
-	reManufact := regexp.MustCompile(`Manufacturer: (.*?$)`)
+	reProduct := regexp.MustCompile(`Product: (.*?$)`)
+	reManufacture := regexp.MustCompile(`Manufacturer: (.*?$)`)
 	reSerial := regexp.MustCompile(`SerialNumber: (.*?$)`)
 	rePort := regexp.MustCompile(`(?m)usb (.*[0-9]):`)
 	usStorage := regexp.MustCompile(`usb-storage (.*?$)`)
+	reHost := regexp.MustCompile(`(.*:\d{2}\s)(.*) (.*:\s\[)`)
 
 	for _, event := range events {
 		if event.ActionType == "c" {
-			if strings.Contains(event.LogLine, "New USB device found, ") {
-				host := strings.Split(event.LogLine, ` `)[4]
+			switch {
+			case strings.Contains(event.LogLine, "New USB device found, "):
+				host := utils.GetSub(reHost, event.LogLine, 2)
 				vid := utils.GetSub(reVid, event.LogLine, 1)
 				pid := utils.GetSub(rePid, event.LogLine, 1)
-
 				port := utils.GetSub(rePort, event.LogLine, 1)
 				allEvents = append(allEvents, data.Event{
 					ConnectedTime:     event.Date,
@@ -146,11 +146,10 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 				curr++
 				link = 2
 				interrupted = false
-
-			} else if !interrupted {
+			case !interrupted:
 				switch {
 				case link == 2:
-					prod := utils.GetSub(reProd, event.LogLine, 1)
+					prod := utils.GetSub(reProduct, event.LogLine, 1)
 					if prod == "" {
 						interrupted = true
 					} else {
@@ -158,11 +157,11 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						link = 3
 					}
 				case link == 3:
-					manufact := utils.GetSub(reManufact, event.LogLine, 1)
-					if manufact == "" {
+					manufacture := utils.GetSub(reManufacture, event.LogLine, 1)
+					if manufacture == "" {
 						interrupted = true
 					} else {
-						allEvents[curr].ManufacturerName = manufact
+						allEvents[curr].ManufacturerName = manufacture
 						link = 4
 					}
 				case link == 4:
@@ -180,7 +179,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 					}
 					interrupted = true
 				}
-			} else {
+			default:
 				continue
 			}
 		} else if event.ActionType == "d" {
