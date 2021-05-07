@@ -7,7 +7,6 @@ import (
 	"github.com/pixfid/luft/data"
 	"github.com/pixfid/luft/usbids"
 	"github.com/umputun/go-flags"
-	"log"
 	"os"
 	"time"
 )
@@ -18,27 +17,15 @@ const (
 )
 
 var opts struct {
-	/*
-		Ids struct {
-			Update bool `long:"update" env:"UPDATE" description:"Update (download) the USB ID database." required:"false"`
-			Search struct {
-				Vid string `short:"v" long:"vid" env:"VID" description:"Vendor ID"`
-				Pid string `short:"p" long:"pid" env:"PID" description:"Product ID"`
-			} `group:"search" namespace:"search" env-namespace:"SEARCH"`
-		} `group:"ids" namespace:"ids" env-namespace:"IDS"`
-	*/
-
 	MassStorage      bool   `short:"m" long:"masstorage" env:"MASSTORAGE" description:"show only mass storage devices"`
 	Untrusted        bool   `short:"u" long:"untrusted" env:"UNTRUSTED" description:"show only untrusted devices"`
 	Number           int    `short:"n" long:"number" env:"NUMBER" description:"number of events to show"`
 	Sort             string `short:"s" long:"sort" env:"SORT" choice:"asc" choice:"desc" description:"sort events" default:"asc"`
 	Export           bool   `short:"e" long:"export" env:"EXPORT" description:"export events"`
 	CheckByWhiteList bool   `short:"c" long:"check" env:"CHECK" description:"check devices for whitelist"`
-	ExtUsbIds        bool   `short:"E" long:"extusbids" env:"EXTUSBIDS" description:"external usbids data base"`
-	Verbose          bool   `short:"v" long:"verbose" env:"VERBOSE" description:"Makes luft verbose during the operation."`
 
 	External struct {
-		Whitelist string `short:"W" env:"WHITELIST" long:"whitelist" description:"whitelist path"`
+		Whitelist string `short:"W" env:"WHITELIST" long:"whitelist" description:"external whitelist path"`
 		UsbIds    string `short:"U" env:"USBIDS" long:"usbids" description:"usbids path" default:"/var/core/usbutils/usb.ids"`
 	}
 
@@ -65,6 +52,7 @@ func PrintBanner() {
 }
 
 func main() {
+
 	PrintBanner()
 
 	_, _ = cfmt.Println(cfmt.Sprintf("[*] Starting at: %v", time.Now().Format(time.Stamp)))
@@ -74,7 +62,7 @@ func main() {
 
 	if _, err := p.Parse(); err != nil {
 		if err.(*flags.Error).Type != flags.ErrHelp {
-			log.Printf("[ERROR] cli error: %v", err)
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[ERROR] cli error: %v}}::red"), err)
 		}
 		os.Exit(1)
 	}
@@ -87,7 +75,6 @@ func main() {
 		Number:             opts.Number,
 		Export:             opts.Export,
 		Format:             opts.Events.Export.Format,
-		ExternalUsbIds:     opts.ExtUsbIds,
 		ExternalUsbIdsPath: opts.External.UsbIds,
 		SortBy:             opts.Sort,
 		Untrusted:          opts.Untrusted,
@@ -95,46 +82,28 @@ func main() {
 		Password:           opts.Events.Remote.Password,
 		Port:               opts.Events.Remote.Port,
 		IP:                 opts.Events.Remote.IP,
-		Verbose:            opts.Verbose,
 	}
 
-	if opts.CheckByWhiteList {
-		if _, err := os.Stat(opts.External.Whitelist); !os.IsNotExist(err) {
-			err := utils.LoadWhiteList(opts.External.Whitelist)
-			if err != nil {
-				_, _ = cfmt.Println("{{Error loading external whitelist}}::red")
-			}
-		} else {
-			err := utils.LoadWhiteList("/etc/udev/rules.d/99_PDAC_LOCAL_flash.rules")
-			if err != nil {
-				_, _ = cfmt.Println("{{Error loading external whitelist}}::red")
-			}
+	if _, err := os.Stat(opts.External.Whitelist); !os.IsNotExist(err) {
+		if err := utils.LoadWhiteList(opts.External.Whitelist); err != nil {
+			_, _ = cfmt.Println("{{Error loading external whitelist}}::red")
+		}
+	} else {
+		if err := utils.LoadWhiteList("/etc/udev/rules.d/99_PDAC_LOCAL_flash.rules"); err != nil {
+			_, _ = cfmt.Println("{{Error loading system udev whitelist}}::red")
 		}
 	}
 
-	if opts.ExtUsbIds {
+	if _, err := os.Stat(opts.External.UsbIds); !os.IsNotExist(err) {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Using external usb.ids}}::green", time.Now().Format(time.Stamp)))
-		if _, err := os.Stat(opts.External.UsbIds); !os.IsNotExist(err) {
-			err := usbids.LoadFromFile(opts.External.UsbIds)
-			if err != nil {
-				_, _ = cfmt.Println("{{Try load another one usb.ids}}::green")
-				err := usbids.LoadFromFiles()
-				if err != nil {
-					_, _ = cfmt.Println("{{Can`t loading any usb.ids}}::red")
-				}
-			}
-		} else {
-			_, _ = cfmt.Println("{{Try load another one usb.ids}}::green")
-			err := usbids.LoadFromFiles()
-			if err != nil {
-				_, _ = cfmt.Println("{{Can`t loading any usb.ids}}::red")
+		if err := usbids.LoadFromFile(opts.External.UsbIds); err != nil {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] {{Try load another one usb.ids}}::green", time.Now().Format(time.Stamp)))
+			if err := usbids.LoadFromFiles(); err != nil {
+				_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Error loading any usb.ids}}::red", time.Now().Format(time.Stamp)))
 			}
 		}
 	} else {
-		err := usbids.LoadFromFiles()
-		if err != nil {
-			_, _ = cfmt.Println("{{Can`t loading any usb.ids}}::red")
-		}
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] %s}}::red", time.Now().Format(time.Stamp), err.Error()))
 	}
 
 	if opts.Untrusted {
@@ -143,13 +112,14 @@ func main() {
 
 	switch opts.Events.Source {
 	case "local":
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered events}}::green", time.Now().Format(time.Stamp)))
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered local events}}::green", time.Now().Format(time.Stamp)))
 		parsers.LocalEvents(parseParams)
 	case "remote":
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered events}}::green", time.Now().Format(time.Stamp)))
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered remote events}}::green", time.Now().Format(time.Stamp)))
 		parsers.RemoteEvents(parseParams)
-	case "database":
+	default:
 	}
 
 	_, _ = cfmt.Println(cfmt.Sprintf("[*] Shut down at: %v", time.Now().Format(time.Stamp)))
+
 }

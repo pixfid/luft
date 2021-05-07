@@ -37,7 +37,6 @@ type ParseParams struct {
 	CheckWl            bool
 	Export             bool
 	Format             string
-	ExternalUsbIds     bool
 	ExternalUsbIdsPath string
 	SortBy             string
 	Untrusted          bool
@@ -46,5 +45,4 @@ type ParseParams struct {
 	Port               string
 	IP                 string
 	Number             int
-	Verbose            bool
 }
