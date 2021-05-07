@@ -60,7 +60,7 @@ Examples
 #### Get USB events history from remote host:
 ```./luft -cm -W=99_PDAC_LOCAL_flash.rules -S=remote -I=10.211.55.11 -L=user -P=password```
 
-<img width="1282" alt="Screenshot 2021-04-18 at 23 07 39" src="https://user-images.githubusercontent.com/1672087/115159258-f6259d00-a09a-11eb-90e1-428e0793a1b0.png">
+<img width="1274" alt="Screenshot 2021-05-06 at 17 58 18" src="https://user-images.githubusercontent.com/1672087/117387775-28842680-aef2-11eb-8bfd-cfa084db0f05.png">
 
 
 ### Export with various formats json, xml, pdf (with logo `stats.png`)
