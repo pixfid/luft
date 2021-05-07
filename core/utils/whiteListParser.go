@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	whiteListRegex = regexp.MustCompile(`\S+"(?P<serial>.*)"\S+"(?P<flag>.*)"\s#(?P<comment>.*)`)
+	udevRulesRegex = regexp.MustCompile(`\S+"(?P<serial>.*)"\S+"(?P<flag>.*)"\s#(?P<comment>.*)`)
 	wl             = map[string]*Serial{}
 )
 
@@ -33,16 +33,17 @@ func LoadWhiteList(wlPath string) error {
 		return err
 	}
 
-	return parseWhiteList(string(content), whiteListRegex)
+	return udevWhiteListParser(content)
 }
 
-func parseWhiteList(fileContents string, whiteListRegex *regexp.Regexp) error {
+func emitSerial(wl map[string]*Serial, serial Serial) {
+	wl[serial.Serial] = &serial
+}
 
-	emitSerial := func(wl map[string]*Serial, serial Serial) {
-		wl[serial.Serial] = &serial
-	}
+func udevWhiteListParser(fileData []byte) error {
+	content := string(fileData)
 
-	re := whiteListRegex.FindAllStringSubmatch(fileContents, -1)
+	re := udevRulesRegex.FindAllStringSubmatch(content, -1)
 
 	if re := re; re != nil {
 		for _, fields := range re {
