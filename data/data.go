@@ -1,6 +1,8 @@
 package data
 
-import "time"
+import (
+	"time"
+)
 
 type ActionType int8
 
@@ -37,6 +39,7 @@ type ParseParams struct {
 	CheckWl            bool
 	Export             bool
 	Format             string
+	FileName           string
 	ExternalUsbIdsPath string
 	SortBy             string
 	Untrusted          bool

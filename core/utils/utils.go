@@ -282,19 +282,19 @@ func savePDF(pdf *gofpdf.Fpdf, fn string) error {
 	return pdf.OutputFileAndClose(fn)
 }
 
-func ExportData(events []data.Event, format string) {
+func ExportData(events []data.Event, format string, fileName string) {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Representation: %s }}::green", time.Now().Format(time.Stamp), format))
 	var exportData []byte
 	var fn string
 	switch format {
 	case "json":
-		fn = fmt.Sprintf("events_data.%s", "json")
+		fn = fmt.Sprintf("%s.%s", fileName, "json")
 		exportData, _ = json.MarshalIndent(events, "", " ")
 	case "xml":
-		fn = fmt.Sprintf("events_data.%s", "xml")
+		fn = fmt.Sprintf("%s.%s", fileName, "xml")
 		exportData, _ = xml.MarshalIndent(events, "", " ")
 	case "pdf":
-		GenerateReport(events, fmt.Sprintf("events_data.%s", "pdf"))
+		GenerateReport(events, fmt.Sprintf("%s.%s", fileName, "pdf"))
 	}
 	if exportData != nil {
 		err := ioutil.WriteFile(fn, exportData, fs.ModePerm)
