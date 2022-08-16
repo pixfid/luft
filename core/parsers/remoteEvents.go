@@ -102,7 +102,7 @@ func RemoteEvents(params data.ParseParams) {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filter and remove duplicates complete, %d clear events found}}::green", time.Now().Format(time.Stamp), len(clearEvents)))
 
 		if params.Export {
-			utils.ExportData(clearEvents, params.Format)
+			utils.ExportData(clearEvents, params.Format, params.FileName)
 		} else {
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Representation: table}}::green", time.Now().Format(time.Stamp)))
 			utils.PrintEvents(clearEvents)

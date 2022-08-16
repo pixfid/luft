@@ -32,7 +32,8 @@ var opts struct {
 	Events struct {
 		Source string `short:"S" long:"source" choice:"local" choice:"remote" choice:"database" description:"events target" required:"true"`
 		Export struct {
-			Format string `short:"F" long:"format" choice:"json" choice:"xml" choice:"pdf" env:"FORMAT" description:"events export format" default:"pdf"`
+			Format   string `short:"F" long:"format" choice:"json" choice:"xml" choice:"pdf" env:"FORMAT" description:"events export format" default:"pdf"`
+			FileName string `short:"N" long:"filename" env:"FILENAME" description:"events export file name" default:"events_data"`
 		} `group:"export" namespace:"export" env-namespace:"EXPORT"`
 		Path   string `long:"path" description:"log directory" default:"/var/log/"`
 		Remote struct {
@@ -75,6 +76,7 @@ func main() {
 		Number:             opts.Number,
 		Export:             opts.Export,
 		Format:             opts.Events.Export.Format,
+		FileName:           opts.Events.Export.FileName,
 		ExternalUsbIdsPath: opts.External.UsbIds,
 		SortBy:             opts.Sort,
 		Untrusted:          opts.Untrusted,

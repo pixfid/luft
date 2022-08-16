@@ -36,7 +36,7 @@ func LocalEvents(params data.ParseParams) {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filter and remove duplicates complete, %d clear events found}}::green", time.Now().Format(time.Stamp), len(events)))
 
 	if params.Export {
-		utils.ExportData(events, params.Format)
+		utils.ExportData(events, params.Format, params.FileName)
 	} else {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Representation: table}}::green", time.Now().Format(time.Stamp)))
 		utils.PrintEvents(events)
