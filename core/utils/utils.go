@@ -311,7 +311,7 @@ func savePDF(pdf *gofpdf.Fpdf, fn string) error {
 	return pdf.OutputFileAndClose(fn)
 }
 
-func ExportData(events []data.Event, format string) error {
+func ExportData(events []data.Event, format string, fileName string) error {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Representation: %s }}::green", time.Now().Format(time.Stamp), format))
 
 	var exportData []byte
@@ -320,19 +320,19 @@ func ExportData(events []data.Event, format string) error {
 
 	switch format {
 	case "json":
-		fn = fmt.Sprintf("events_data.%s", "json")
+		fn = fmt.Sprintf("%s.%s", fileName, "json")
 		exportData, err = json.MarshalIndent(events, "", " ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 	case "xml":
-		fn = fmt.Sprintf("events_data.%s", "xml")
+		fn = fmt.Sprintf("%s.%s", fileName, "xml")
 		exportData, err = xml.MarshalIndent(events, "", " ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal XML: %w", err)
 		}
 	case "pdf":
-		fn = fmt.Sprintf("events_data.%s", "pdf")
+		fn = fmt.Sprintf("%s.%s", fileName, "pdf")
 		if err := GenerateReport(events, fn); err != nil {
 			return fmt.Errorf("failed to generate PDF report: %w", err)
 		}

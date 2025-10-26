@@ -46,7 +46,7 @@ func LocalEvents(params data.ParseParams) error {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filter and remove duplicates complete, %d clear events found}}::green", time.Now().Format(time.Stamp), len(events)))
 
 	if params.Export {
-		if err := utils.ExportData(events, params.Format); err != nil {
+		if err := utils.ExportData(events, params.Format, params.FileName); err != nil {
 			return fmt.Errorf("failed to export events: %w", err)
 		}
 	} else {
