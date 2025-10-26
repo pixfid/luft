@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/i582/cfmt/cmd/cfmt"
+	"github.com/pixfid/luft/config"
 	"github.com/pixfid/luft/core/parsers"
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
@@ -18,6 +19,7 @@ const (
 )
 
 var opts struct {
+	ConfigFile       string `long:"config" env:"LUFT_CONFIG" description:"path to config file (YAML)"`
 	MassStorage      bool   `short:"m" long:"masstorage" env:"MASSTORAGE" description:"show only mass storage devices"`
 	Untrusted        bool   `short:"u" long:"untrusted" env:"UNTRUSTED" description:"show only untrusted devices"`
 	Number           int    `short:"n" long:"number" env:"NUMBER" description:"number of events to show"`
@@ -31,8 +33,9 @@ var opts struct {
 	}
 
 	Events struct {
-		Source string `short:"S" long:"source" choice:"local" choice:"remote" choice:"database" description:"events target" required:"true"`
-		Export struct {
+		Source     string `short:"S" long:"source" choice:"local" choice:"remote" choice:"database" description:"events target" required:"true"`
+		RemoteHost string `long:"remote-host" env:"REMOTE_HOST" description:"remote host name from config file"`
+		Export     struct {
 			Format   string `short:"F" long:"format" choice:"json" choice:"xml" choice:"pdf" env:"FORMAT" description:"events export format" default:"pdf"`
 			FileName string `short:"N" long:"filename" env:"FILENAME" description:"events export file name" default:"events_data"`
 		} `group:"export" namespace:"export" env-namespace:"EXPORT"`
@@ -56,6 +59,81 @@ func PrintBanner() {
 {{┴─┘└─┘└   ┴ }}::bgLightRed {{%s}}::lightBlue`, ver, url))
 }
 
+// mergeConfigWithFlags merges config file values with CLI flags
+// CLI flags take precedence over config file values
+func mergeConfigWithFlags(cfg *config.Config) {
+	// Apply config values only if CLI flags are not set
+
+	// Whitelist
+	if opts.External.Whitelist == "" && cfg.Whitelist != "" {
+		opts.External.Whitelist = cfg.Whitelist
+	}
+
+	// USB IDs
+	if opts.External.UsbIds == "/var/core/usbutils/usb.ids" && cfg.UsbIds != "" {
+		opts.External.UsbIds = cfg.UsbIds
+	}
+
+	// Log path
+	if opts.Events.Path == "/var/log/" && cfg.LogPath != "" {
+		opts.Events.Path = cfg.LogPath
+	}
+
+	// Export format
+	if opts.Events.Export.Format == "pdf" && cfg.Export.Format != "" {
+		opts.Events.Export.Format = cfg.Export.Format
+	}
+
+	// Mass storage filter
+	if !opts.MassStorage && cfg.MassStorage {
+		opts.MassStorage = cfg.MassStorage
+	}
+
+	// Untrusted filter
+	if !opts.Untrusted && cfg.Untrusted {
+		opts.Untrusted = cfg.Untrusted
+	}
+
+	// Check whitelist
+	if !opts.CheckByWhiteList && cfg.CheckWl {
+		opts.CheckByWhiteList = cfg.CheckWl
+	}
+
+	// Remote host from config
+	if opts.Events.Source == "remote" && opts.Events.RemoteHost != "" {
+		host, err := cfg.GetRemoteHost(opts.Events.RemoteHost)
+		if err != nil {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+			os.Exit(1)
+		}
+
+		// Apply remote host settings if CLI flags are not set
+		if opts.Events.Remote.IP == "" {
+			opts.Events.Remote.IP = host.IP
+		}
+		if opts.Events.Remote.Port == "22" {
+			opts.Events.Remote.Port = host.Port
+		}
+		if opts.Events.Remote.Login == "" {
+			opts.Events.Remote.Login = host.User
+		}
+		if opts.Events.Remote.SSHKey == "" {
+			opts.Events.Remote.SSHKey = host.SSHKey
+		}
+		if opts.Events.Remote.Password == "" {
+			opts.Events.Remote.Password = host.Password
+		}
+		if opts.Events.Remote.Timeout == 30 {
+			opts.Events.Remote.Timeout = host.Timeout
+		}
+		if !opts.Events.Remote.InsecureSSH {
+			opts.Events.Remote.InsecureSSH = host.InsecureSSH
+		}
+
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Using remote host from config: %s (%s)}}::green", time.Now().Format(time.Stamp), host.Name, host.IP))
+	}
+}
+
 func main() {
 
 	PrintBanner()
@@ -71,6 +149,16 @@ func main() {
 		}
 		os.Exit(1)
 	}
+
+	// Load configuration file
+	cfg, err := config.Load(opts.ConfigFile)
+	if err != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Error loading config: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		os.Exit(1)
+	}
+
+	// Merge config with CLI flags (CLI flags take precedence)
+	mergeConfigWithFlags(cfg)
 
 	var parseParams = data.ParseParams{
 		LogPath:            opts.Events.Path,
@@ -175,7 +263,6 @@ func main() {
 	}
 
 	// Execute based on source
-	var err error
 	switch opts.Events.Source {
 	case "local":
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered local events}}::green", time.Now().Format(time.Stamp)))

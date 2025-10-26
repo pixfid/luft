@@ -20,33 +20,108 @@ Usage:
   luft [OPTIONS]
 
 Application Options:
+      --config=                               path to config file (YAML) [$LUFT_CONFIG]
   -m, --masstorage                            show only mass storage devices [$MASSTORAGE]
   -u, --untrusted                             show only untrusted devices [$UNTRUSTED]
   -n, --number=                               number of events to show [$NUMBER]
   -s, --sort=[asc|desc]                       sort events (default: asc) [$SORT]
   -e, --export                                export events [$EXPORT]
   -c, --check                                 check devices for whitelist [$CHECK]
-  -E, --extusbids                             external usbids data base [$EXTUSBIDS]
-  -W, --whitelist=                            whitelist path [$WHITELIST]
+  -W, --whitelist=                            external whitelist path [$WHITELIST]
   -U, --usbids=                               usbids path (default: /var/lib/usbutils/usb.ids) [$USBIDS]
 
 events:
   -S, --events.source=[local|remote|database] events target
+      --events.remote-host=                   remote host name from config file [$REMOTE_HOST]
       --events.path=                          log directory (default: /var/log/)
 
 export:
   -F, --events.export.format=[json|xml|pdf]   events export format (default: pdf) [$EVENTS_EXPORT_FORMAT]
+  -N, --events.export.filename=               events export file name (default: events_data) [$EVENTS_EXPORT_FILENAME]
 
 remote:
   -I, --events.remote.ip=                     ip address [$EVENTS_REMOTE_IP]
       --events.remote.port=                   ssh port (default: 22) [$EVENTS_REMOTE_PORT]
   -L, --events.remote.login=                  login [$EVENTS_REMOTE_LOGIN]
-  -P, --events.remote.password=               password [$EVENTS_REMOTE_PASSWORD]
+  -P, --events.remote.password=               password (deprecated, use SSH key instead) [$EVENTS_REMOTE_PASSWORD]
+  -K, --events.remote.ssh-key=                path to SSH private key (recommended) [$EVENTS_REMOTE_SSH_KEY]
+  -T, --events.remote.timeout=                SSH connection timeout in seconds (default: 30) [$EVENTS_REMOTE_TIMEOUT]
+      --events.remote.insecure-ssh            skip SSH host key verification (NOT RECOMMENDED) [$EVENTS_REMOTE_INSECURE_SSH]
 
 Help Options:
   -h, --help                                  Show this help message
+```
 
+## Configuration File
 
+LUFT supports YAML configuration files for easier management of settings and remote hosts.
+
+### Config File Locations
+
+LUFT searches for configuration files in the following locations (in order):
+1. Custom path specified with `--config` flag
+2. `~/.luft.yaml` (user home directory)
+3. `./.luft.yaml` (current directory)
+4. `/etc/luft/.luft.yaml` (system-wide)
+
+### Configuration Priority
+
+Settings are applied in the following priority order (highest to lowest):
+1. **CLI flags** (highest priority)
+2. **Environment variables**
+3. **Config file**
+4. **Default values** (lowest priority)
+
+### Example Configuration
+
+Copy `.luft.yaml.example` to `~/.luft.yaml` and customize:
+
+```yaml
+# Path to whitelist file
+whitelist: /etc/udev/rules.d/99_PDAC_LOCAL_flash.rules
+
+# Path to USB IDs database
+usbids: /var/lib/usbutils/usb.ids
+
+# Default log directory
+log_path: /var/log/
+
+# Filter options
+mass_storage: false
+untrusted: false
+check_whitelist: true
+
+# Export settings
+export:
+  format: pdf
+  path: ~/luft-reports
+
+# Remote hosts
+remote_hosts:
+  - name: prod-server
+    ip: 10.0.0.1
+    port: "22"
+    user: admin
+    ssh_key: ~/.ssh/id_rsa
+    timeout: 30
+    insecure_ssh: false
+
+  - name: dev-server
+    ip: 192.168.1.100
+    user: developer
+    ssh_key: ~/.ssh/dev_key
+```
+
+### Using Remote Hosts from Config
+
+Instead of specifying remote connection details via CLI flags, you can define hosts in your config file:
+
+```bash
+# Scan remote host from config
+./luft -S remote --remote-host=prod-server
+
+# Override config values with CLI flags
+./luft -S remote --remote-host=prod-server -T 60
 ```
 
 Examples
@@ -54,11 +129,26 @@ Examples
 
 ### Events history:
 
-#### Get USB event history:
-```./luft -cm -S=local -W=99_PDAC_LOCAL_flash.rules```
+#### Get USB event history (local):
+```bash
+./luft -cm -S=local -W=99_PDAC_LOCAL_flash.rules
+```
 
-#### Get USB events history from remote host:
-```./luft -cm -W=99_PDAC_LOCAL_flash.rules -S=remote -I=10.211.55.11 -L=user -P=password```
+#### Get USB events from remote host (CLI flags):
+```bash
+./luft -cm -W=99_PDAC_LOCAL_flash.rules -S=remote -I=10.211.55.11 -L=user -K=~/.ssh/id_rsa
+```
+
+#### Get USB events from remote host (using config):
+```bash
+# First, setup ~/.luft.yaml with remote host details
+./luft -cm -S=remote --remote-host=prod-server
+```
+
+#### Use custom config file:
+```bash
+./luft --config=/path/to/custom.yaml -S=local
+```
 
 <img width="1274" alt="Screenshot 2021-05-06 at 17 58 18" src="https://user-images.githubusercontent.com/1672087/117387775-28842680-aef2-11eb-8bfd-cfa084db0f05.png">
 
@@ -87,6 +177,7 @@ Credits & References
 * [tablewriter](https://github.com/olekukonko/tablewriter)
 * [gofpdf](https://github.com/jung-kurt/gofpdf)
 * [go-flags](https://github.com/umputun/go-flags)
+* [viper](https://github.com/spf13/viper)
 
 ## Contact
 

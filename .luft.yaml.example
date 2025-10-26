@@ -1,0 +1,64 @@
+# LUFT Configuration File Example
+# Copy this file to ~/.luft.yaml or /etc/luft/.luft.yaml
+# You can also specify a custom path with --config flag
+
+# Path to whitelist file (udev rules)
+whitelist: /etc/udev/rules.d/99_PDAC_LOCAL_flash.rules
+
+# Path to USB IDs database
+usbids: /var/lib/usbutils/usb.ids
+
+# Default log directory to scan
+log_path: /var/log/
+
+# Filter options
+mass_storage: false    # Show only mass storage devices
+untrusted: false       # Show only untrusted devices
+check_whitelist: true  # Check devices against whitelist
+
+# Export settings
+export:
+  format: pdf          # Export format: pdf, json, xml
+  path: ~/luft-reports # Export directory
+
+# Remote hosts configuration
+# Use with: luft -S remote --remote-host=prod-server
+remote_hosts:
+  - name: prod-server
+    ip: 10.0.0.1
+    port: "22"
+    user: admin
+    ssh_key: ~/.ssh/id_rsa
+    timeout: 30
+    insecure_ssh: false
+
+  - name: dev-server
+    ip: 192.168.1.100
+    port: "22"
+    user: developer
+    ssh_key: ~/.ssh/dev_key
+    timeout: 30
+    insecure_ssh: false
+
+  - name: test-server
+    ip: 192.168.1.101
+    port: "2222"
+    user: tester
+    password: "test123"  # Not recommended - use SSH key instead
+    timeout: 60
+    insecure_ssh: false
+
+# Example usage:
+# 1. Scan local system with config settings:
+#    luft -S local
+#
+# 2. Scan remote host from config:
+#    luft -S remote --remote-host=prod-server
+#
+# 3. Override config with CLI flags:
+#    luft -S local -c -m -W /path/to/custom/whitelist.rules
+#
+# 4. Export to JSON instead of PDF:
+#    luft -S local -e -F json
+#
+# Priority: CLI flags > Environment variables > Config file > Defaults
