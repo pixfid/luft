@@ -45,7 +45,7 @@ func CollectLogs(params data.ParseParams) []string {
 func parseLine(scanner *bufio.Scanner) []data.LogEvent {
 	r := regexp.MustCompile(`(?:]|:) usb (.*?): `)
 	u := regexp.MustCompile(`(?:]|:) usb-storage (.*?): `)
-	d := regexp.MustCompile(`(\w{3,}\s\d{2}\s\d{2}:\d{2}:\d{2})`)
+	d := regexp.MustCompile(`(\S+\s+\d+\s\d{2}:\d{2}:\d{2})`)
 
 	var logEvents []data.LogEvent
 
@@ -75,6 +75,7 @@ func parseUGzipped(path string) []data.LogEvent {
 	file, err := os.Open(path)
 	if err != nil {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cannot read log file: %s}}::red", time.Now().Format(time.Stamp), path))
+		return []data.LogEvent{}
 	}
 
 	defer file.Close()
@@ -87,6 +88,7 @@ func parseGzipped(path string) []data.LogEvent {
 
 	if err != nil {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cannot read log file: %s}}::red", time.Now().Format(time.Stamp), path))
+		return []data.LogEvent{}
 	}
 
 	gz, err := gzip.NewReader(file)
@@ -116,7 +118,7 @@ func ParseFiles(files []string) []data.LogEvent {
 	return recordTypes
 }
 
-//CollectEventsData collect data from events logs.
+// CollectEventsData collect data from events logs.
 func CollectEventsData(events []data.LogEvent) []data.Event {
 	var curr = -1
 	var link int

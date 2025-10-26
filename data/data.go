@@ -45,4 +45,7 @@ type ParseParams struct {
 	Port               string
 	IP                 string
 	Number             int
+	SSHKeyPath         string
+	SSHTimeout         int
+	InsecureSSH        bool
 }

@@ -36,10 +36,13 @@ var opts struct {
 		} `group:"export" namespace:"export" env-namespace:"EXPORT"`
 		Path   string `long:"path" description:"log directory" default:"/var/log/"`
 		Remote struct {
-			IP       string `short:"I" long:"ip" env:"IP" description:"ip address"`
-			Port     string `long:"port" env:"PORT" description:"ssh port" default:"22"`
-			Login    string `short:"L" long:"login" env:"LOGIN" description:"login"`
-			Password string `short:"P" long:"password" env:"PASSWORD" description:"password"`
+			IP          string `short:"I" long:"ip" env:"IP" description:"ip address"`
+			Port        string `long:"port" env:"port" description:"ssh port" default:"22"`
+			Login       string `short:"L" long:"login" env:"LOGIN" description:"login"`
+			Password    string `short:"P" long:"password" env:"PASSWORD" description:"password (deprecated, use SSH key instead)"`
+			SSHKey      string `short:"K" long:"ssh-key" env:"SSH_KEY" description:"path to SSH private key (recommended)"`
+			Timeout     int    `short:"T" long:"timeout" env:"TIMEOUT" description:"SSH connection timeout in seconds" default:"30"`
+			InsecureSSH bool   `long:"insecure-ssh" env:"INSECURE_SSH" description:"skip SSH host key verification (NOT RECOMMENDED)"`
 		} `group:"remote" namespace:"remote" env-namespace:"REMOTE"`
 	} `group:"events" namespace:"events" env-namespace:"EVENTS"`
 }
@@ -82,6 +85,9 @@ func main() {
 		Password:           opts.Events.Remote.Password,
 		Port:               opts.Events.Remote.Port,
 		IP:                 opts.Events.Remote.IP,
+		SSHKeyPath:         opts.Events.Remote.SSHKey,
+		SSHTimeout:         opts.Events.Remote.Timeout,
+		InsecureSSH:        opts.Events.Remote.InsecureSSH,
 	}
 
 	if _, err := os.Stat(opts.External.Whitelist); !os.IsNotExist(err) {
@@ -108,6 +114,20 @@ func main() {
 
 	if opts.Untrusted {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Will be print only untrusted devices}}::green", time.Now().Format(time.Stamp)))
+	}
+
+	// Security warnings for remote connections
+	if opts.Events.Source == "remote" {
+		if opts.Events.Remote.InsecureSSH {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ⚠️  WARNING: SSH host key verification is DISABLED! Connection is vulnerable to man-in-the-middle attacks.}}::bgRed|white|bold", time.Now().Format(time.Stamp)))
+		}
+		if opts.Events.Remote.Password != "" && opts.Events.Remote.SSHKey == "" {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ⚠️  WARNING: Using password authentication. SSH key authentication is more secure.}}::yellow|bold", time.Now().Format(time.Stamp)))
+		}
+		if opts.Events.Remote.Password == "" && opts.Events.Remote.SSHKey == "" {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: Either password (-P) or SSH key (-K) must be provided for remote connection}}::red", time.Now().Format(time.Stamp)))
+			os.Exit(1)
+		}
 	}
 
 	switch opts.Events.Source {

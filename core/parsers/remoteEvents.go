@@ -16,18 +16,39 @@ import (
 )
 
 func RemoteEvents(params data.ParseParams) {
-	config := &ssh.ClientConfig{
-		User: params.Login,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(params.Password),
-		},
-		HostKeyCallback: utils.TrustedHostKeyCallback(""),
-	}
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", params.IP, params.Port), config)
+	// Get SSH authentication methods
+	authMethods, err := utils.GetSSHAuthMethods(params.SSHKeyPath, params.Password)
 	if err != nil {
-		_, _ = cfmt.Println("{{Failed to dial}}::red")
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to setup authentication: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
 		return
 	}
+
+	// Get host key callback
+	hostKeyCallback, err := utils.GetHostKeyCallback(params.InsecureSSH)
+	if err != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to setup host key verification: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Hint: Use --insecure-ssh to skip verification (NOT RECOMMENDED)}}::yellow", time.Now().Format(time.Stamp)))
+		return
+	}
+
+	config := &ssh.ClientConfig{
+		User:            params.Login,
+		Auth:            authMethods,
+		HostKeyCallback: hostKeyCallback,
+		Timeout:         time.Duration(params.SSHTimeout) * time.Second,
+	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Connecting to %s:%s with timeout %ds...}}::green",
+		time.Now().Format(time.Stamp), params.IP, params.Port, params.SSHTimeout))
+
+	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", params.IP, params.Port), config)
+	if err != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to dial: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		return
+	}
+	defer conn.Close()
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Successfully connected to remote host}}::green", time.Now().Format(time.Stamp)))
 
 	hostName := func(cmd string) string {
 		session, _ := conn.NewSession()
@@ -56,8 +77,9 @@ func RemoteEvents(params data.ParseParams) {
 
 		var recordTypes []data.LogEvent
 		var scanner *bufio.Scanner
-
+		var gz *gzip.Reader
 		for _, s := range path {
+
 			if filepath.Ext(s) == ".gz" {
 				file, err := client.Open(s)
 
@@ -65,7 +87,7 @@ func RemoteEvents(params data.ParseParams) {
 					_, _ = cfmt.Println("{{Failed to open file}}::red")
 				}
 
-				gz, err := gzip.NewReader(file)
+				gz, err = gzip.NewReader(file)
 
 				if err != nil {
 					_, _ = cfmt.Println("{{Failed to create Reader}}::red")
