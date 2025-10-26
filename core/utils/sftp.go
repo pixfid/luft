@@ -4,11 +4,12 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // GetHostKeyCallback returns appropriate SSH host key callback based on security settings

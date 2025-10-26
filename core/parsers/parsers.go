@@ -4,32 +4,33 @@ import (
 	"bufio"
 	"compress/gzip"
 	"fmt"
-	"github.com/i582/cfmt"
-	"github.com/pixfid/luft/core/utils"
-	"github.com/pixfid/luft/data"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/i582/cfmt/cmd/cfmt"
+	"github.com/pixfid/luft/core/utils"
+	"github.com/pixfid/luft/data"
 )
 
 // Compiled regular expressions for log parsing (performance optimization)
 var (
 	// parseLine regexes
-	reUSB         = regexp.MustCompile(`(?:]|:) usb (.*?): `)
-	reUSBStorage  = regexp.MustCompile(`(?:]|:) usb-storage (.*?): `)
-	reTimestamp   = regexp.MustCompile(`(\S+\s+\d+\s\d{2}:\d{2}:\d{2})`)
+	reUSB        = regexp.MustCompile(`(?:]|:) usb (.*?): `)
+	reUSBStorage = regexp.MustCompile(`(?:]|:) usb-storage (.*?): `)
+	reTimestamp  = regexp.MustCompile(`(\S+\s+\d+\s\d{2}:\d{2}:\d{2})`)
 
 	// CollectEventsData regexes
-	reVid         = regexp.MustCompile(`idVendor=(\w+)`)
-	rePid         = regexp.MustCompile(`idProduct=(\w+)`)
-	reProduct     = regexp.MustCompile(`Product: (.*?$)`)
-	reManufacture = regexp.MustCompile(`Manufacturer: (.*?$)`)
-	reSerial      = regexp.MustCompile(`SerialNumber: (.*?$)`)
-	rePort        = regexp.MustCompile(`(?m)usb (.*[0-9]):`)
+	reVid             = regexp.MustCompile(`idVendor=(\w+)`)
+	rePid             = regexp.MustCompile(`idProduct=(\w+)`)
+	reProduct         = regexp.MustCompile(`Product: (.*?$)`)
+	reManufacture     = regexp.MustCompile(`Manufacturer: (.*?$)`)
+	reSerial          = regexp.MustCompile(`SerialNumber: (.*?$)`)
+	rePort            = regexp.MustCompile(`(?m)usb (.*[0-9]):`)
 	reUSBStorageMatch = regexp.MustCompile(`usb-storage (.*?$)`)
-	reHost        = regexp.MustCompile(`(.*:\d{2}\s)(.*) (.*:\s\[)`)
+	reHost            = regexp.MustCompile(`(.*:\d{2}\s)(.*) (.*:\s\[)`)
 )
 
 func CollectLogs(params data.ParseParams) ([]string, error) {

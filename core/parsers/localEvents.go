@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/i582/cfmt"
+	"github.com/i582/cfmt/cmd/cfmt"
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
 )

@@ -1,14 +1,15 @@
 package main
 
 import (
-	"github.com/i582/cfmt"
+	"os"
+	"time"
+
+	"github.com/i582/cfmt/cmd/cfmt"
 	"github.com/pixfid/luft/core/parsers"
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
 	"github.com/pixfid/luft/usbids"
 	"github.com/umputun/go-flags"
-	"os"
-	"time"
 )
 
 const (

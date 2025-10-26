@@ -4,12 +4,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/i582/cfmt"
-	"github.com/jung-kurt/gofpdf"
-	"github.com/olekukonko/tablewriter"
-	"github.com/pixfid/luft/data"
-	"github.com/pixfid/luft/usbids"
-	"github.com/thoas/go-funk"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -19,6 +13,15 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/i582/cfmt/cmd/cfmt"
+	"github.com/jung-kurt/gofpdf"
+	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/renderer"
+	"github.com/pixfid/luft/data"
+	"github.com/pixfid/luft/usbids"
+	"github.com/thoas/go-funk"
 )
 
 func Submatch(r *regexp.Regexp, logLine string, idx int) string {
@@ -170,53 +173,67 @@ func ExpandPath(path string) (string, error) {
 }
 
 func PrintEvents(e []data.Event) {
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Connected", "Host", "VID", "PID", "Manufacturer", "Product", "Serial Number"}) //, "Port", "Disconnected"})
-
-	table.SetColumnColor(
-		tablewriter.Colors{tablewriter.Normal, tablewriter.FgGreenColor}, //connection date
-		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //host
-		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //vid
-		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //pid
-		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //product
-		tablewriter.Colors{tablewriter.Normal, tablewriter.FgWhiteColor}, //manufacturer
-		tablewriter.Colors{tablewriter.Normal, tablewriter.FgHiRedColor}, //serial
-		//tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiWhiteColor}, //port
-		//tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},   //disconnected
-	)
-
-	for _, event := range e {
-		if event.Trusted {
-			table.Rich([]string{
-				event.ConnectedTime.Format("Jan _2 15:04:05"),
-				event.Host,
-				event.Vid,
-				event.Pid,
-				event.ManufacturerName,
-				event.ProductName,
-				event.SerialNumber,
-				//event.Port,
-				//event.Disconn
-			},
-				[]tablewriter.Colors{
-					{tablewriter.Normal, tablewriter.FgGreenColor}, //connection date
-					{tablewriter.Normal, tablewriter.FgWhiteColor}, //host
-					{tablewriter.Normal, tablewriter.FgWhiteColor}, //vid
-					{tablewriter.Normal, tablewriter.FgWhiteColor}, //pid
-					{tablewriter.Normal, tablewriter.FgWhiteColor}, //product
-					{tablewriter.Normal, tablewriter.FgWhiteColor}, //manufacturer
-					{tablewriter.Normal, tablewriter.FgGreenColor}, //serial
-					//{tablewriter.Bold, tablewriter.FgHiWhiteColor}, //port
-					//{tablewriter.Bold, tablewriter.FgHiRedColor},   //disconnected
-				})
-		} else {
-			table.Append([]string{event.ConnectedTime.Format("Jan _2 15:04:05"), event.Host, event.Vid, event.Pid, event.ManufacturerName, event.ProductName, event.SerialNumber}) //event.Port, event.Disconn})
-		}
+	// Configure colorized renderer
+	headerTint := renderer.Tint{
+		FG: renderer.Colors{color.FgWhite, color.Bold},
 	}
 
-	table.SetBorder(true) // Set Border to false
-	table.SetAutoMergeCells(false)
-	table.SetRowLine(true)
+	columnTint := renderer.Tint{
+		FG: renderer.Colors{color.FgWhite},
+		Columns: []renderer.Tint{
+			{FG: renderer.Colors{color.FgGreen}}, // Connected time
+			{FG: renderer.Colors{color.FgWhite}}, // Host
+			{FG: renderer.Colors{color.FgWhite}}, // VID
+			{FG: renderer.Colors{color.FgWhite}}, // PID
+			{FG: renderer.Colors{color.FgWhite}}, // Manufacturer
+			{FG: renderer.Colors{color.FgWhite}}, // Product
+			{FG: renderer.Colors{color.FgHiRed}}, // Serial Number (default red for untrusted)
+		},
+	}
+
+	borderTint := renderer.Tint{
+		FG: renderer.Colors{color.FgHiBlack},
+	}
+
+	config := renderer.ColorizedConfig{
+		Header: headerTint,
+		Column: columnTint,
+		Border: borderTint,
+	}
+
+	// Create table with colorized renderer
+	table := tablewriter.NewTable(os.Stdout,
+		tablewriter.WithRenderer(renderer.NewColorized(config)),
+	)
+
+	// Set header
+	table.Header("Connected", "Host", "VID", "PID", "Manufacturer", "Product", "Serial Number")
+
+	// Add data rows
+	greenSerial := color.New(color.FgGreen).SprintFunc()
+	redSerial := color.New(color.FgHiRed).SprintFunc()
+
+	for _, event := range e {
+		serialNumber := event.SerialNumber
+		// Color the serial number based on trust status
+		if event.Trusted {
+			serialNumber = greenSerial(event.SerialNumber)
+		} else {
+			serialNumber = redSerial(event.SerialNumber)
+		}
+
+		table.Append(
+			event.ConnectedTime.Format("Jan _2 15:04:05"),
+			event.Host,
+			event.Vid,
+			event.Pid,
+			event.ManufacturerName,
+			event.ProductName,
+			serialNumber,
+		)
+	}
+
+	// Render the table
 	table.Render()
 }
 

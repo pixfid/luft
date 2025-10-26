@@ -2,11 +2,12 @@ package usbids
 
 import (
 	"bufio"
-	"github.com/i582/cfmt"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/i582/cfmt/cmd/cfmt"
 )
 
 var (

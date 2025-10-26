@@ -2,12 +2,13 @@ package utils
 
 import (
 	"fmt"
-	"github.com/i582/cfmt"
 	"io/ioutil"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/i582/cfmt/cmd/cfmt"
 )
 
 var (

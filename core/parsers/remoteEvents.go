@@ -5,14 +5,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
-	"github.com/i582/cfmt"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/i582/cfmt/cmd/cfmt"
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
-	"path/filepath"
-	"strings"
-	"time"
 )
 
 func RemoteEvents(params data.ParseParams) error {
