@@ -117,24 +117,18 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 }
 
 func RemoveDuplicates(events []data.Event) []data.Event {
-	var clearEvents []data.Event
+	// Use map for O(n) performance instead of O(n²)
+	seen := make(map[time.Time]bool)
+	clearEvents := make([]data.Event, 0, len(events))
+
 	for _, event := range events {
-		if !InSlice(clearEvents, event) {
+		if !seen[event.ConnectedTime] {
+			seen[event.ConnectedTime] = true
 			clearEvents = append(clearEvents, event)
 		}
 	}
 
 	return clearEvents
-}
-
-func InSlice(arr []data.Event, val data.Event) bool {
-	for _, v := range arr {
-		if v.ConnectedTime == val.ConnectedTime {
-			return true
-		}
-	}
-
-	return false
 }
 
 func TimeStampToTime(timeStampString string) time.Time {

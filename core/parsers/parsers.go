@@ -14,6 +14,24 @@ import (
 	"time"
 )
 
+// Compiled regular expressions for log parsing (performance optimization)
+var (
+	// parseLine regexes
+	reUSB         = regexp.MustCompile(`(?:]|:) usb (.*?): `)
+	reUSBStorage  = regexp.MustCompile(`(?:]|:) usb-storage (.*?): `)
+	reTimestamp   = regexp.MustCompile(`(\S+\s+\d+\s\d{2}:\d{2}:\d{2})`)
+
+	// CollectEventsData regexes
+	reVid         = regexp.MustCompile(`idVendor=(\w+)`)
+	rePid         = regexp.MustCompile(`idProduct=(\w+)`)
+	reProduct     = regexp.MustCompile(`Product: (.*?$)`)
+	reManufacture = regexp.MustCompile(`Manufacturer: (.*?$)`)
+	reSerial      = regexp.MustCompile(`SerialNumber: (.*?$)`)
+	rePort        = regexp.MustCompile(`(?m)usb (.*[0-9]):`)
+	reUSBStorageMatch = regexp.MustCompile(`usb-storage (.*?$)`)
+	reHost        = regexp.MustCompile(`(.*:\d{2}\s)(.*) (.*:\s\[)`)
+)
+
 func CollectLogs(params data.ParseParams) ([]string, error) {
 	var files []string
 
@@ -52,20 +70,15 @@ func CollectLogs(params data.ParseParams) ([]string, error) {
 }
 
 func parseLine(scanner *bufio.Scanner) []data.LogEvent {
-	r := regexp.MustCompile(`(?:]|:) usb (.*?): `)
-	u := regexp.MustCompile(`(?:]|:) usb-storage (.*?): `)
-	d := regexp.MustCompile(`(\S+\s+\d+\s\d{2}:\d{2}:\d{2})`)
-
 	var logEvents []data.LogEvent
 
 	buf := make([]byte, 0, 64*1024)
-
 	scanner.Buffer(buf, 1024*1024)
 
 	for scanner.Scan() {
 		logLine := scanner.Text()
-		if r.MatchString(logLine) || u.MatchString(logLine) {
-			logTime := utils.Submatch(d, logLine, 1)
+		if reUSB.MatchString(logLine) || reUSBStorage.MatchString(logLine) {
+			logTime := utils.Submatch(reTimestamp, logLine, 1)
 			dateTime := utils.TimeStampToTime(logTime)
 			eventType := utils.GetActionType(logLine)
 
@@ -132,15 +145,6 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 	var interrupted bool
 	allEvents := make([]data.Event, 0)
 
-	reVid := regexp.MustCompile(`idVendor=(\w+)`)
-	rePid := regexp.MustCompile(`idProduct=(\w+)`)
-	reProduct := regexp.MustCompile(`Product: (.*?$)`)
-	reManufacture := regexp.MustCompile(`Manufacturer: (.*?$)`)
-	reSerial := regexp.MustCompile(`SerialNumber: (.*?$)`)
-	rePort := regexp.MustCompile(`(?m)usb (.*[0-9]):`)
-	usStorage := regexp.MustCompile(`usb-storage (.*?$)`)
-	reHost := regexp.MustCompile(`(.*:\d{2}\s)(.*) (.*:\s\[)`)
-
 	for _, event := range events {
 		if event.ActionType == data.Connected {
 			switch {
@@ -193,7 +197,7 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 						link = 5
 					}
 				case link == 5:
-					storage := utils.Submatch(usStorage, event.LogLine, 1)
+					storage := utils.Submatch(reUSBStorageMatch, event.LogLine, 1)
 					if storage != "" {
 						allEvents[curr].IsMassStorage = true
 					}
