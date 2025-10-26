@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/i582/cfmt/cmd/cfmt"
@@ -20,6 +21,7 @@ const (
 
 var opts struct {
 	ConfigFile       string `long:"config" env:"LUFT_CONFIG" description:"path to config file (YAML)"`
+	UpdateUSBIDs     bool   `long:"update-usbids" description:"download and update USB IDs database"`
 	MassStorage      bool   `short:"m" long:"masstorage" env:"MASSTORAGE" description:"show only mass storage devices"`
 	Untrusted        bool   `short:"u" long:"untrusted" env:"UNTRUSTED" description:"show only untrusted devices"`
 	Number           int    `short:"n" long:"number" env:"NUMBER" description:"number of events to show"`
@@ -33,7 +35,7 @@ var opts struct {
 	}
 
 	Events struct {
-		Source     string `short:"S" long:"source" choice:"local" choice:"remote" choice:"database" description:"events target" required:"true"`
+		Source     string `short:"S" long:"source" choice:"local" choice:"remote" choice:"database" description:"events target"`
 		RemoteHost string `long:"remote-host" env:"REMOTE_HOST" description:"remote host name from config file"`
 		Export     struct {
 			Format   string `short:"F" long:"format" choice:"json" choice:"xml" choice:"pdf" env:"FORMAT" description:"events export format" default:"pdf"`
@@ -134,6 +136,68 @@ func mergeConfigWithFlags(cfg *config.Config) {
 	}
 }
 
+// handleUSBIDsUpdate handles the --update-usbids flag
+func handleUSBIDsUpdate() {
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] USB IDs Update Mode}}::cyan|bold", time.Now().Format(time.Stamp)))
+
+	// Determine target path for USB IDs file
+	targetPath := opts.External.UsbIds
+
+	// If default path is not writable, try alternatives
+	if !isWritable(targetPath) {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: %s is not writable, trying alternatives...}}::yellow", time.Now().Format(time.Stamp), targetPath))
+
+		// Try user's home directory
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			targetPath = homeDir + "/.local/share/luft/usb.ids"
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Using alternative path: %s}}::cyan", time.Now().Format(time.Stamp), targetPath))
+		} else {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: Cannot determine writable location}}::red", time.Now().Format(time.Stamp)))
+			os.Exit(1)
+		}
+	}
+
+	// Update USB IDs
+	if err := usbids.UpdateUSBIDs(targetPath); err != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: Failed to update USB IDs: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		os.Exit(1)
+	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ Update completed successfully!}}::green|bold", time.Now().Format(time.Stamp)))
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] To use this database, run luft with: --usbids=%s}}::cyan", time.Now().Format(time.Stamp), targetPath))
+}
+
+// isWritable checks if a path is writable
+func isWritable(path string) bool {
+	// Check if file exists
+	info, err := os.Stat(path)
+	if err == nil {
+		// File exists, check if writable
+		testFile, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return false
+		}
+		testFile.Close()
+		return true
+	}
+
+	// File doesn't exist, check if directory is writable
+	dir := path
+	if info == nil || !info.IsDir() {
+		dir = filepath.Dir(path)
+	}
+
+	// Try to create a temp file in the directory
+	testFile, err := os.CreateTemp(dir, ".luft-write-test-*")
+	if err != nil {
+		return false
+	}
+	testFile.Close()
+	os.Remove(testFile.Name())
+	return true
+}
+
 func main() {
 
 	PrintBanner()
@@ -147,6 +211,19 @@ func main() {
 		if err.(*flags.Error).Type != flags.ErrHelp {
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[ERROR] cli error: %v}}::red", err))
 		}
+		os.Exit(1)
+	}
+
+	// Handle USB IDs update flag
+	if opts.UpdateUSBIDs {
+		handleUSBIDsUpdate()
+		return
+	}
+
+	// Validate required flags for normal operation
+	if opts.Events.Source == "" {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[ERROR] the required flag -S/--events.source was not specified}}::red"))
+		_, _ = cfmt.Println(cfmt.Sprintf("{{Run 'luft --help' for usage information}}::yellow"))
 		os.Exit(1)
 	}
 

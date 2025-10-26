@@ -21,6 +21,7 @@ Usage:
 
 Application Options:
       --config=                               path to config file (YAML) [$LUFT_CONFIG]
+      --update-usbids                         download and update USB IDs database
   -m, --masstorage                            show only mass storage devices [$MASSTORAGE]
   -u, --untrusted                             show only untrusted devices [$UNTRUSTED]
   -n, --number=                               number of events to show [$NUMBER]
@@ -124,6 +125,36 @@ Instead of specifying remote connection details via CLI flags, you can define ho
 ./luft -S remote --remote-host=prod-server -T 60
 ```
 
+## Updating USB IDs Database
+
+LUFT uses the USB IDs database to identify device manufacturers and products. Keep it up-to-date for better device recognition.
+
+### Auto-update USB IDs
+
+```bash
+# Update to default location (requires root/sudo for system paths)
+sudo ./luft --update-usbids
+
+# Update to custom location
+./luft --update-usbids --usbids=~/.local/share/luft/usb.ids
+
+# Use updated database
+./luft -S local --usbids=~/.local/share/luft/usb.ids
+```
+
+The update command will:
+1. Try multiple sources (usb-ids.gowly.com, GitHub, linux-usb.org)
+2. Show download progress
+3. Verify the database by loading it
+4. Display version and date information
+
+**Sources (in order of priority):**
+- https://usb-ids.gowly.com/usb.ids
+- https://raw.githubusercontent.com/gentoo/hwids/master/usb.ids
+- http://www.linux-usb.org/usb.ids
+
+**Note:** If the default path is not writable, the tool will automatically use `~/.local/share/luft/usb.ids` as an alternative.
+
 Examples
 ==========
 
@@ -166,9 +197,13 @@ TODO
 ==========
 
 * [ ] Rewrite all ugly code
-* [ ] Update usb.ids
+* [x] Update usb.ids (implemented via `--update-usbids`)
 * [ ] View events with data \ time intervals
 * [ ] Search usb device with only one of (vid | pid)
+* [x] YAML configuration support
+* [ ] Database storage (SQLite)
+* [ ] Real-time monitoring mode
+* [ ] CSV export format
 
 Credits & References
 ==========

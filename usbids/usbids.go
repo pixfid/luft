@@ -2,7 +2,11 @@ package usbids
 
 import (
 	"bufio"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -130,4 +134,147 @@ func FindDevice(vid, pid string) (string, string) {
 	}
 
 	return "", ""
+}
+
+// ProgressReader tracks download progress
+type ProgressReader struct {
+	io.Reader
+	Total      int64
+	Current    int64
+	OnProgress func(current, total int64)
+}
+
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	n, err := pr.Reader.Read(p)
+	pr.Current += int64(n)
+
+	if pr.OnProgress != nil {
+		pr.OnProgress(pr.Current, pr.Total)
+	}
+
+	return n, err
+}
+
+// UpdateUSBIDs downloads the latest USB IDs database
+func UpdateUSBIDs(targetPath string) error {
+	// USB IDs sources (in order of preference)
+	sources := []string{
+		"https://usb-ids.gowly.com/usb.ids",
+		"https://raw.githubusercontent.com/gentoo/hwids/master/usb.ids",
+		"http://www.linux-usb.org/usb.ids",
+	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Updating USB IDs database...}}::cyan", time.Now().Format(time.Stamp)))
+
+	var lastErr error
+	for _, source := range sources {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Trying source: %s}}::yellow", time.Now().Format(time.Stamp), source))
+
+		err := downloadUSBIDs(source, targetPath)
+		if err == nil {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ USB IDs database successfully updated to: %s}}::green", time.Now().Format(time.Stamp), targetPath))
+
+			// Try to load and display version info
+			if loadErr := LoadFromFile(targetPath); loadErr == nil {
+				_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Database version: %s, Date: %s}}::green", time.Now().Format(time.Stamp), Version, Date))
+			}
+
+			return nil
+		}
+
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		lastErr = err
+	}
+
+	return fmt.Errorf("failed to download USB IDs from all sources: %w", lastErr)
+}
+
+// downloadUSBIDs downloads USB IDs file from a specific source
+func downloadUSBIDs(url, targetPath string) error {
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+	}
+
+	// Make request
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to fetch %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	// Get content length for progress tracking
+	contentLength := resp.ContentLength
+
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", "usb.ids.*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath) // Clean up temp file
+
+	// Create progress reader
+	var lastProgress int
+	progressReader := &ProgressReader{
+		Reader: resp.Body,
+		Total:  contentLength,
+		OnProgress: func(current, total int64) {
+			if total > 0 {
+				progress := int(float64(current) / float64(total) * 100)
+				// Update every 5%
+				if progress-lastProgress >= 5 || progress == 100 {
+					_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Downloaded: %d%%}}::cyan",
+						time.Now().Format(time.Stamp), progress))
+					lastProgress = progress
+				}
+			}
+		},
+	}
+
+	// Download to temp file
+	_, err = io.Copy(tmpFile, progressReader)
+	tmpFile.Close()
+	if err != nil {
+		return fmt.Errorf("failed to download file: %w", err)
+	}
+
+	// Ensure target directory exists
+	targetDir := filepath.Dir(targetPath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+
+	// Move temp file to target location
+	if err := os.Rename(tmpPath, targetPath); err != nil {
+		// If rename fails (cross-device), try copy
+		if copyErr := copyFile(tmpPath, targetPath); copyErr != nil {
+			return fmt.Errorf("failed to move file to target: %w", copyErr)
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	return err
 }
