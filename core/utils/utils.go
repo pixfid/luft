@@ -51,7 +51,9 @@ func GetActionType(logLine string) data.ActionType {
 }
 
 func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
-	var filtered []data.Event
+	// Start with all events - critical fix to prevent empty result when OnlyMass=false
+	filtered := events
+
 	//filter only mass devices
 	if params.OnlyMass {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filter only mass storage devices}}::green", time.Now().Format(time.Stamp)))
@@ -74,12 +76,12 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 
 	//filter Untrusted
 	if params.Untrusted {
-
 		filtered = funk.Filter(filtered, func(event data.Event) bool {
 			return !event.Trusted
 		}).([]data.Event)
 	}
 
+	// Enrich with USB IDs database information
 	for i, event := range filtered {
 		manufactureStr, productStr := usbids.FindDevice(event.Vid, event.Pid)
 		if len(productStr) != 0 {
@@ -91,6 +93,7 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 		}
 	}
 
+	// Sort events
 	sort.Slice(filtered, func(i, j int) bool {
 		switch params.SortBy {
 		case "desc":
@@ -101,7 +104,12 @@ func FilterEvents(params data.ParseParams, events []data.Event) []data.Event {
 		return filtered[i].ConnectedTime.Before(filtered[j].ConnectedTime)
 	})
 
+	// Limit number of results with bounds checking
 	if params.Number != 0 {
+		if params.Number > len(filtered) {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: requested %d events but only %d available}}::yellow", time.Now().Format(time.Stamp), params.Number, len(filtered)))
+			return filtered
+		}
 		return filtered[0:params.Number]
 	}
 
@@ -131,7 +139,25 @@ func InSlice(arr []data.Event, val data.Event) bool {
 
 func TimeStampToTime(timeStampString string) time.Time {
 	layout := "Jan _2 15:04:05"
-	pTime, _ := time.Parse(layout, timeStampString)
+	pTime, err := time.Parse(layout, timeStampString)
+	if err != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to parse timestamp '%s': %s}}::red", time.Now().Format(time.Stamp), timeStampString, err.Error()))
+		return time.Time{}
+	}
+
+	// Linux syslog doesn't include year in timestamps, so we need to add it
+	// Use current year, but if the parsed month is in the future, use previous year
+	now := time.Now()
+	year := now.Year()
+
+	// If the event month is greater than current month, it must be from last year
+	// e.g., current date is Jan 2024, but log shows Dec - must be Dec 2023
+	if pTime.Month() > now.Month() {
+		year--
+	}
+
+	// Reconstruct time with the correct year
+	pTime = time.Date(year, pTime.Month(), pTime.Day(), pTime.Hour(), pTime.Minute(), pTime.Second(), 0, time.Local)
 
 	return pTime
 }
