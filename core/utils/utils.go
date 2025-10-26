@@ -226,20 +226,23 @@ func PrintEvents(e []data.Event) {
 	table.Render()
 }
 
-func GenerateReport(events []data.Event, fn string) {
+func GenerateReport(events []data.Event, fn string) error {
 	pdf := newReport()
 	pdf = image(pdf)
 	pdf = header(pdf)
 	pdf = table(pdf, events)
 
 	if pdf.Err() {
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed creating PDF report: %s}}::red", time.Now().Format(time.Stamp), pdf.Err()))
+		return fmt.Errorf("failed creating PDF report: %v", pdf.Error())
 	}
 
 	err := savePDF(pdf, fn)
 	if err != nil {
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cannot save PDF: %s}}::red", time.Now().Format(time.Stamp), pdf.Err()))
+		return fmt.Errorf("cannot save PDF to %s: %w", fn, err)
 	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] PDF report saved to: %s}}::green", time.Now().Format(time.Stamp), fn))
+	return nil
 }
 
 var colWidths = map[string]float64{"C": 30, "H": 30, "V": 10, "P": 10, "PR": 70, "M": 70, "S": 60}
@@ -308,24 +311,43 @@ func savePDF(pdf *gofpdf.Fpdf, fn string) error {
 	return pdf.OutputFileAndClose(fn)
 }
 
-func ExportData(events []data.Event, format string) {
+func ExportData(events []data.Event, format string) error {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Representation: %s }}::green", time.Now().Format(time.Stamp), format))
+
 	var exportData []byte
 	var fn string
+	var err error
+
 	switch format {
 	case "json":
 		fn = fmt.Sprintf("events_data.%s", "json")
-		exportData, _ = json.MarshalIndent(events, "", " ")
+		exportData, err = json.MarshalIndent(events, "", " ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal JSON: %w", err)
+		}
 	case "xml":
 		fn = fmt.Sprintf("events_data.%s", "xml")
-		exportData, _ = xml.MarshalIndent(events, "", " ")
+		exportData, err = xml.MarshalIndent(events, "", " ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal XML: %w", err)
+		}
 	case "pdf":
-		GenerateReport(events, fmt.Sprintf("events_data.%s", "pdf"))
+		fn = fmt.Sprintf("events_data.%s", "pdf")
+		if err := GenerateReport(events, fn); err != nil {
+			return fmt.Errorf("failed to generate PDF report: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown export format: %s", format)
 	}
+
 	if exportData != nil {
 		err := ioutil.WriteFile(fn, exportData, fs.ModePerm)
 		if err != nil {
-			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Events exported to: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+			return fmt.Errorf("failed to write file %s: %w", fn, err)
 		}
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Events exported to: %s}}::green", time.Now().Format(time.Stamp), fn))
 	}
+
+	return nil
 }

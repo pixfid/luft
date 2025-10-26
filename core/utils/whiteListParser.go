@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"fmt"
 	"github.com/i582/cfmt"
 	"io/ioutil"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -45,18 +47,35 @@ func udevWhiteListParser(fileData []byte) error {
 
 	re := udevRulesRegex.FindAllStringSubmatch(content, -1)
 
-	if re := re; re != nil {
-		for _, fields := range re {
-			result, err := strconv.ParseBool(fields[2])
-			if err != nil {
-				_, _ = cfmt.Println(cfmt.Sprintf("{{Error while parse whitelist record}}::red"))
-			}
-			emitSerial(wl, Serial{
-				Serial:     fields[1],
-				IsIgnore:   result,
-				Commentary: strings.TrimSpace(fields[3]),
-			})
-		}
+	if re == nil || len(re) == 0 {
+		return fmt.Errorf("no valid whitelist entries found in file")
 	}
+
+	successCount := 0
+	for i, fields := range re {
+		if len(fields) < 4 {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: skipping malformed whitelist entry %d}}::yellow", time.Now().Format(time.Stamp), i+1))
+			continue
+		}
+
+		result, err := strconv.ParseBool(fields[2])
+		if err != nil {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: invalid boolean value in whitelist entry %d (serial: %s), defaulting to false}}::yellow", time.Now().Format(time.Stamp), i+1, fields[1]))
+			result = false
+		}
+
+		emitSerial(wl, Serial{
+			Serial:     fields[1],
+			IsIgnore:   result,
+			Commentary: strings.TrimSpace(fields[3]),
+		})
+		successCount++
+	}
+
+	if successCount == 0 {
+		return fmt.Errorf("failed to parse any valid whitelist entries")
+	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Loaded %d whitelist entries}}::green", time.Now().Format(time.Stamp), successCount))
 	return nil
 }

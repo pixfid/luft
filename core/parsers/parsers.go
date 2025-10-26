@@ -3,6 +3,7 @@ package parsers
 import (
 	"bufio"
 	"compress/gzip"
+	"fmt"
 	"github.com/i582/cfmt"
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
@@ -13,16 +14,20 @@ import (
 	"time"
 )
 
-func CollectLogs(params data.ParseParams) []string {
+func CollectLogs(params data.ParseParams) ([]string, error) {
 	var files []string
 
 	path, err := utils.ExpandPath(params.LogPath)
-
 	if err != nil {
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Filed expand path: %s}}::red", time.Now().Format(time.Stamp), path))
+		return nil, fmt.Errorf("failed to expand path %s: %w", params.LogPath, err)
 	}
 
 	err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// Skip files/directories that we can't access
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: skipping %s: %s}}::yellow", time.Now().Format(time.Stamp), path, err.Error()))
+			return nil
+		}
 		switch {
 		case strings.Contains(path, "syslog"):
 			files = append(files, path)
@@ -36,10 +41,14 @@ func CollectLogs(params data.ParseParams) []string {
 		return nil
 	})
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to walk directory %s: %w", path, err)
 	}
 
-	return files
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no log files found in %s", path)
+	}
+
+	return files, nil
 }
 
 func parseLine(scanner *bufio.Scanner) []data.LogEvent {

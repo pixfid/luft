@@ -90,13 +90,37 @@ func main() {
 		InsecureSSH:        opts.Events.Remote.InsecureSSH,
 	}
 
-	if _, err := os.Stat(opts.External.Whitelist); !os.IsNotExist(err) {
-		if err := utils.LoadWhiteList(opts.External.Whitelist); err != nil {
-			_, _ = cfmt.Println("{{Error loading external whitelist}}::red")
+	// Load whitelist if needed
+	if opts.CheckByWhiteList {
+		var whitelistLoaded bool
+		if opts.External.Whitelist != "" {
+			if _, err := os.Stat(opts.External.Whitelist); !os.IsNotExist(err) {
+				if err := utils.LoadWhiteList(opts.External.Whitelist); err != nil {
+					_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Error loading external whitelist %s: %s}}::red", time.Now().Format(time.Stamp), opts.External.Whitelist, err.Error()))
+				} else {
+					_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Loaded whitelist from %s}}::green", time.Now().Format(time.Stamp), opts.External.Whitelist))
+					whitelistLoaded = true
+				}
+			} else {
+				_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: whitelist file not found: %s}}::yellow", time.Now().Format(time.Stamp), opts.External.Whitelist))
+			}
 		}
-	} else {
-		if err := utils.LoadWhiteList("/etc/udev/rules.d/99_PDAC_LOCAL_flash.rules"); err != nil {
-			_, _ = cfmt.Println("{{Error loading system udev whitelist}}::red")
+
+		// Try default location if custom whitelist not loaded
+		if !whitelistLoaded {
+			defaultWhitelist := "/etc/udev/rules.d/99_PDAC_LOCAL_flash.rules"
+			if _, err := os.Stat(defaultWhitelist); !os.IsNotExist(err) {
+				if err := utils.LoadWhiteList(defaultWhitelist); err != nil {
+					_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Error loading system udev whitelist: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+				} else {
+					_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Loaded default whitelist from %s}}::green", time.Now().Format(time.Stamp), defaultWhitelist))
+					whitelistLoaded = true
+				}
+			}
+		}
+
+		if !whitelistLoaded {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: no whitelist loaded, but whitelist checking is enabled}}::yellow", time.Now().Format(time.Stamp)))
 		}
 	}
 
@@ -116,28 +140,54 @@ func main() {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Will be print only untrusted devices}}::green", time.Now().Format(time.Stamp)))
 	}
 
-	// Security warnings for remote connections
+	// Validate and show warnings for remote connections
 	if opts.Events.Source == "remote" {
+		// Validate required parameters
+		if opts.Events.Remote.IP == "" {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: IP address is required for remote connection (use -I flag)}}::red", time.Now().Format(time.Stamp)))
+			os.Exit(1)
+		}
+		if opts.Events.Remote.Login == "" {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: Login is required for remote connection (use -L flag)}}::red", time.Now().Format(time.Stamp)))
+			os.Exit(1)
+		}
+		if opts.Events.Remote.Password == "" && opts.Events.Remote.SSHKey == "" {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: Either password (-P) or SSH key (-K) must be provided for remote connection}}::red", time.Now().Format(time.Stamp)))
+			os.Exit(1)
+		}
+
+		// Security warnings
 		if opts.Events.Remote.InsecureSSH {
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ⚠️  WARNING: SSH host key verification is DISABLED! Connection is vulnerable to man-in-the-middle attacks.}}::bgRed|white|bold", time.Now().Format(time.Stamp)))
 		}
 		if opts.Events.Remote.Password != "" && opts.Events.Remote.SSHKey == "" {
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ⚠️  WARNING: Using password authentication. SSH key authentication is more secure.}}::yellow|bold", time.Now().Format(time.Stamp)))
 		}
-		if opts.Events.Remote.Password == "" && opts.Events.Remote.SSHKey == "" {
-			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: Either password (-P) or SSH key (-K) must be provided for remote connection}}::red", time.Now().Format(time.Stamp)))
-			os.Exit(1)
-		}
 	}
 
+	// Validate number parameter
+	if opts.Number < 0 {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: number of events cannot be negative}}::red", time.Now().Format(time.Stamp)))
+		os.Exit(1)
+	}
+
+	// Execute based on source
+	var err error
 	switch opts.Events.Source {
 	case "local":
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered local events}}::green", time.Now().Format(time.Stamp)))
-		parsers.LocalEvents(parseParams)
+		err = parsers.LocalEvents(parseParams)
 	case "remote":
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Preparing gathered remote events}}::green", time.Now().Format(time.Stamp)))
-		parsers.RemoteEvents(parseParams)
+		err = parsers.RemoteEvents(parseParams)
 	default:
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: unknown source type: %s}}::red", time.Now().Format(time.Stamp), opts.Events.Source))
+		os.Exit(1)
+	}
+
+	if err != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		os.Exit(1)
 	}
 
 	_, _ = cfmt.Println(cfmt.Sprintf("[*] Shut down at: %v", time.Now().Format(time.Stamp)))
