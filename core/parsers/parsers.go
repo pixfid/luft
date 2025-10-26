@@ -85,19 +85,17 @@ func parseUGzipped(path string) []data.LogEvent {
 
 func parseGzipped(path string) []data.LogEvent {
 	file, err := os.Open(path)
-
 	if err != nil {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cannot read log file: %s}}::red", time.Now().Format(time.Stamp), path))
 		return []data.LogEvent{}
 	}
+	defer file.Close()
 
 	gz, err := gzip.NewReader(file)
-
 	if err != nil {
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cannot create gzip reader: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cannot create gzip reader for %s: %s}}::red", time.Now().Format(time.Stamp), path, err.Error()))
+		return []data.LogEvent{}
 	}
-
-	defer file.Close()
 	defer gz.Close()
 
 	return parseLine(bufio.NewScanner(gz))

@@ -51,23 +51,28 @@ func RemoteEvents(params data.ParseParams) {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Successfully connected to remote host}}::green", time.Now().Format(time.Stamp)))
 
 	hostName := func(cmd string) string {
-		session, _ := conn.NewSession()
+		session, err := conn.NewSession()
+		if err != nil {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to create SSH session: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+			return "unknown"
+		}
 		defer session.Close()
 
 		var stdoutBuf bytes.Buffer
 		session.Stdout = &stdoutBuf
-		err := session.Run(cmd)
+		err = session.Run(cmd)
 		if err != nil {
-			_, _ = cfmt.Println("{{Failed to exec command}}::red")
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to exec command '%s': %s}}::red", time.Now().Format(time.Stamp), cmd, err.Error()))
+			return "unknown"
 		}
 		return strings.TrimSuffix(stdoutBuf.String(), "\n")
 	}
 
 	client, err := sftp.NewClient(conn)
 	if err != nil {
-		_, _ = cfmt.Println("{{Failed to create client}}::red")
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to create SFTP client: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		return
 	}
-	// Close connection
 	defer client.Close()
 
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Starting on: }}::green {{%s}}::red", time.Now().Format(time.Stamp), hostName(`hostname -f`)))
@@ -76,44 +81,53 @@ func RemoteEvents(params data.ParseParams) {
 	readFile := func(path []string, client *sftp.Client) {
 
 		var recordTypes []data.LogEvent
-		var scanner *bufio.Scanner
-		var gz *gzip.Reader
+
 		for _, s := range path {
+			// Process each file in a separate function to ensure proper resource cleanup
+			func(filePath string) {
+				if filepath.Ext(filePath) == ".gz" {
+					file, err := client.Open(filePath)
+					if err != nil {
+						_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to open file %s: %s}}::red", time.Now().Format(time.Stamp), filePath, err.Error()))
+						return
+					}
+					defer file.Close()
 
-			if filepath.Ext(s) == ".gz" {
-				file, err := client.Open(s)
+					gz, err := gzip.NewReader(file)
+					if err != nil {
+						_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to create gzip reader for %s: %s}}::red", time.Now().Format(time.Stamp), filePath, err.Error()))
+						return
+					}
+					defer gz.Close()
 
-				if err != nil {
-					_, _ = cfmt.Println("{{Failed to open file}}::red")
+					scanner := bufio.NewScanner(gz)
+					buf := make([]byte, 0, 64*1024)
+					scanner.Buffer(buf, 1024*1024)
+
+					recordTypes = append(recordTypes, parseLine(scanner)...)
+
+					if err := scanner.Err(); err != nil {
+						_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Scanner error for %s: %s}}::red", time.Now().Format(time.Stamp), filePath, err.Error()))
+					}
+				} else {
+					file, err := client.Open(filePath)
+					if err != nil {
+						_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed to open file %s: %s}}::red", time.Now().Format(time.Stamp), filePath, err.Error()))
+						return
+					}
+					defer file.Close()
+
+					scanner := bufio.NewScanner(file)
+					buf := make([]byte, 0, 64*1024)
+					scanner.Buffer(buf, 1024*1024)
+
+					recordTypes = append(recordTypes, parseLine(scanner)...)
+
+					if err := scanner.Err(); err != nil {
+						_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Scanner error for %s: %s}}::red", time.Now().Format(time.Stamp), filePath, err.Error()))
+					}
 				}
-
-				gz, err = gzip.NewReader(file)
-
-				if err != nil {
-					_, _ = cfmt.Println("{{Failed to create Reader}}::red")
-				}
-
-				defer file.Close()
-				defer gz.Close()
-
-				scanner = bufio.NewScanner(gz)
-			} else {
-				file, err := client.Open(s)
-				if err != nil {
-					_, _ = cfmt.Println("{{Failed to open file}}::red")
-				}
-
-				defer file.Close()
-				scanner = bufio.NewScanner(file)
-			}
-			buf := make([]byte, 0, 64*1024)
-			scanner.Buffer(buf, 1024*1024)
-
-			recordTypes = append(recordTypes, parseLine(scanner)...)
-
-			if err := scanner.Err(); err != nil {
-				_, _ = cfmt.Println(cfmt.Sprintf("{{Failed to %s }}::red", err.Error()))
-			}
+			}(s)
 		}
 
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Found %d events records}}::green", time.Now().Format(time.Stamp), len(recordTypes)))

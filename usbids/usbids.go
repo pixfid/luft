@@ -110,6 +110,7 @@ func LoadFromFile(path string) error {
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
 	return ParseUsbIDs(file)
 }
