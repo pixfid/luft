@@ -67,7 +67,7 @@ func main() {
 
 	if _, err := p.Parse(); err != nil {
 		if err.(*flags.Error).Type != flags.ErrHelp {
-			_, _ = cfmt.Println(cfmt.Sprintf("{{[ERROR] cli error: %v}}::red"), err)
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[ERROR] cli error: %v}}::red", err))
 		}
 		os.Exit(1)
 	}
