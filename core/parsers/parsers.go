@@ -3,6 +3,7 @@ package parsers
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -141,13 +142,13 @@ type fileResult struct {
 }
 
 // ParseFiles parses log files in parallel using a worker pool
-func ParseFiles(files []string) []data.LogEvent {
-	return ParseFilesWithWorkers(files, 0)
+func ParseFiles(ctx context.Context, files []string) []data.LogEvent {
+	return ParseFilesWithWorkers(ctx, files, 0)
 }
 
 // ParseFilesWithWorkers parses log files in parallel with specified number of workers
 // If workers <= 0, uses runtime.NumCPU()
-func ParseFilesWithWorkers(files []string, workers int) []data.LogEvent {
+func ParseFilesWithWorkers(ctx context.Context, files []string, workers int) []data.LogEvent {
 	if len(files) == 0 {
 		return []data.LogEvent{}
 	}
@@ -169,7 +170,7 @@ func ParseFilesWithWorkers(files []string, workers int) []data.LogEvent {
 	if numWorkers == 1 || len(files) == 1 {
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Parsing %d log file(s) sequentially...}}::cyan",
 			time.Now().Format(time.Stamp), len(files)))
-		events := ParseFilesSequential(files)
+		events := ParseFilesSequential(ctx, files)
 		duration := time.Since(startTime)
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ Parsed %d events from %d file(s) in %v}}::green",
 			time.Now().Format(time.Stamp), len(events), len(files), duration))
@@ -187,14 +188,20 @@ func ParseFilesWithWorkers(files []string, workers int) []data.LogEvent {
 	var wg sync.WaitGroup
 	for w := 1; w <= numWorkers; w++ {
 		wg.Add(1)
-		go parseWorker(w, jobs, results, &wg)
+		go parseWorker(ctx, w, jobs, results, &wg)
 	}
 
-	// Send jobs
-	for i, file := range files {
-		jobs <- fileJob{path: file, index: i}
-	}
-	close(jobs)
+	// Send jobs with context support
+	go func() {
+		defer close(jobs)
+		for i, file := range files {
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- fileJob{path: file, index: i}:
+			}
+		}
+	}()
 
 	// Wait for workers and close results
 	go func() {
@@ -234,10 +241,17 @@ func ParseFilesWithWorkers(files []string, workers int) []data.LogEvent {
 }
 
 // parseWorker is a worker that processes file parsing jobs
-func parseWorker(id int, jobs <-chan fileJob, results chan<- fileResult, wg *sync.WaitGroup) {
+func parseWorker(ctx context.Context, id int, jobs <-chan fileJob, results chan<- fileResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for job := range jobs {
+		// Check context cancellation before processing
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		var events []data.LogEvent
 		var err error
 
@@ -254,10 +268,15 @@ func parseWorker(id int, jobs <-chan fileJob, results chan<- fileResult, wg *syn
 			// but parseGzipped/parseUGzipped don't return errors
 		}
 
-		results <- fileResult{
+		// Send result with context support
+		select {
+		case <-ctx.Done():
+			return
+		case results <- fileResult{
 			events: events,
 			index:  job.index,
 			err:    err,
+		}:
 		}
 	}
 }
@@ -277,10 +296,17 @@ func sortFileResults(results []fileResult) {
 }
 
 // ParseFilesSequential parses files sequentially (legacy fallback)
-func ParseFilesSequential(files []string) []data.LogEvent {
+func ParseFilesSequential(ctx context.Context, files []string) []data.LogEvent {
 	var recordTypes []data.LogEvent
 
 	for _, file := range files {
+		// Check context cancellation between files
+		select {
+		case <-ctx.Done():
+			return recordTypes
+		default:
+		}
+
 		switch filepath.Ext(file) {
 		case ".gz":
 			recordTypes = append(recordTypes, parseGzipped(file)...)
@@ -294,6 +320,7 @@ func ParseFilesSequential(files []string) []data.LogEvent {
 
 // StreamingParser manages streaming log parsing with memory efficiency
 type StreamingParser struct {
+	ctx         context.Context
 	files       []string
 	workers     int
 	events      chan data.LogEvent
@@ -304,7 +331,7 @@ type StreamingParser struct {
 }
 
 // NewStreamingParser creates a new streaming parser
-func NewStreamingParser(files []string, workers int) *StreamingParser {
+func NewStreamingParser(ctx context.Context, files []string, workers int) *StreamingParser {
 	if workers <= 0 {
 		workers = runtime.NumCPU()
 	}
@@ -313,6 +340,7 @@ func NewStreamingParser(files []string, workers int) *StreamingParser {
 	}
 
 	return &StreamingParser{
+		ctx:     ctx,
 		files:   files,
 		workers: workers,
 		events:  make(chan data.LogEvent, 1000), // Buffered for backpressure
@@ -335,12 +363,17 @@ func (sp *StreamingParser) Start() {
 		go sp.streamWorker(w, jobs, &wg)
 	}
 
-	// Send jobs
+	// Send jobs with context cancellation support
 	go func() {
+		defer close(jobs)
 		for _, file := range sp.files {
-			jobs <- file
+			select {
+			case <-sp.ctx.Done():
+				// Context cancelled, stop sending jobs
+				return
+			case jobs <- file:
+			}
 		}
-		close(jobs)
 	}()
 
 	// Wait for workers and close channels
@@ -357,7 +390,19 @@ func (sp *StreamingParser) streamWorker(id int, jobs <-chan string, wg *sync.Wai
 	defer wg.Done()
 
 	for filePath := range jobs {
+		// Check context cancellation before processing file
+		select {
+		case <-sp.ctx.Done():
+			// Context cancelled, stop processing
+			return
+		default:
+		}
+
 		if err := sp.streamFile(filePath); err != nil {
+			// Don't send context.Canceled errors
+			if err == context.Canceled {
+				return
+			}
 			select {
 			case sp.errors <- fmt.Errorf("worker %d failed to parse %s: %w", id, filePath, err):
 			default:
@@ -402,6 +447,13 @@ func (sp *StreamingParser) streamFile(path string) error {
 
 	// Stream events line by line
 	for scanner.Scan() {
+		// Check context cancellation periodically
+		select {
+		case <-sp.ctx.Done():
+			return sp.ctx.Err()
+		default:
+		}
+
 		logLine := scanner.Text()
 
 		// Check if line contains USB events
@@ -417,9 +469,13 @@ func (sp *StreamingParser) streamFile(path string) error {
 					LogLine:    logLine,
 				}
 
-				// Send event to channel (blocks if consumer is slow - backpressure)
-				sp.events <- event
-				sp.eventsCount.Add(1)
+				// Send event to channel with context support
+				select {
+				case <-sp.ctx.Done():
+					return sp.ctx.Err()
+				case sp.events <- event:
+					sp.eventsCount.Add(1)
+				}
 			}
 		}
 	}
@@ -449,14 +505,14 @@ func (sp *StreamingParser) Stats() (events int64, files int64) {
 
 // ParseFilesStreaming parses files in streaming mode and returns all events
 // This is a convenience wrapper that collects all events
-func ParseFilesStreaming(files []string, workers int) []data.LogEvent {
+func ParseFilesStreaming(ctx context.Context, files []string, workers int) []data.LogEvent {
 	if len(files) == 0 {
 		return []data.LogEvent{}
 	}
 
 	startTime := time.Now()
 
-	parser := NewStreamingParser(files, workers)
+	parser := NewStreamingParser(ctx, files, workers)
 	parser.Start()
 
 	// Collect events
@@ -469,6 +525,11 @@ func ParseFilesStreaming(files []string, workers int) []data.LogEvent {
 	collecting := true
 	for collecting {
 		select {
+		case <-ctx.Done():
+			// Context cancelled, stop collecting
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Streaming parse cancelled}}::yellow", time.Now().Format(time.Stamp)))
+			collecting = false
+
 		case event, ok := <-parser.Events():
 			if !ok {
 				collecting = false

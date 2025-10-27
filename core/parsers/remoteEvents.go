@@ -17,6 +17,13 @@ import (
 )
 
 func RemoteEvents(params data.ParseParams) error {
+	// Check context before starting
+	select {
+	case <-params.Ctx.Done():
+		return params.Ctx.Err()
+	default:
+	}
+
 	// Get SSH authentication methods
 	authMethods, err := utils.GetSSHAuthMethods(params.SSHKeyPath, params.Password)
 	if err != nil {
@@ -39,11 +46,34 @@ func RemoteEvents(params data.ParseParams) error {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Connecting to %s:%s with timeout %ds...}}::green",
 		time.Now().Format(time.Stamp), params.IP, params.Port, params.SSHTimeout))
 
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", params.IP, params.Port), config)
-	if err != nil {
-		return fmt.Errorf("failed to connect to %s:%s: %w", params.IP, params.Port, err)
+	// Dial with context support - use goroutine to allow cancellation
+	type dialResult struct {
+		conn *ssh.Client
+		err  error
+	}
+	dialChan := make(chan dialResult, 1)
+	go func() {
+		conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", params.IP, params.Port), config)
+		dialChan <- dialResult{conn: conn, err: err}
+	}()
+
+	var conn *ssh.Client
+	select {
+	case <-params.Ctx.Done():
+		return params.Ctx.Err()
+	case result := <-dialChan:
+		if result.err != nil {
+			return fmt.Errorf("failed to connect to %s:%s: %w", params.IP, params.Port, result.err)
+		}
+		conn = result.conn
 	}
 	defer conn.Close()
+
+	// Monitor context and close connection if cancelled
+	go func() {
+		<-params.Ctx.Done()
+		conn.Close()
+	}()
 
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Successfully connected to remote host}}::green", time.Now().Format(time.Stamp)))
 
@@ -78,6 +108,13 @@ func RemoteEvents(params data.ParseParams) error {
 		var recordTypes []data.LogEvent
 
 		for _, s := range path {
+			// Check context cancellation before processing each file
+			select {
+			case <-params.Ctx.Done():
+				return params.Ctx.Err()
+			default:
+			}
+
 			// Process each file in a separate function to ensure proper resource cleanup
 			func(filePath string) {
 				if filepath.Ext(filePath) == ".gz" {

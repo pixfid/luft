@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"time"
 )
 
@@ -33,6 +34,7 @@ type Event struct {
 }
 
 type ParseParams struct {
+	Ctx                context.Context
 	LogPath            string
 	WlPath             string
 	OnlyMass           bool

@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/i582/cfmt/cmd/cfmt"
@@ -218,11 +222,37 @@ func isWritable(path string) bool {
 	return true
 }
 
+// setupSignalHandler creates a context that will be cancelled on SIGINT or SIGTERM
+func setupSignalHandler() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create channel to listen for interrupt signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		sig := <-sigChan
+		_, _ = cfmt.Println(cfmt.Sprintf("\n{{[%v] Received signal: %v - initiating graceful shutdown...}}::yellow|bold", time.Now().Format(time.Stamp), sig))
+		cancel()
+
+		// Force exit if second signal received
+		sig = <-sigChan
+		_, _ = cfmt.Println(cfmt.Sprintf("\n{{[%v] Received second signal: %v - forcing immediate exit}}::red|bold", time.Now().Format(time.Stamp), sig))
+		os.Exit(1)
+	}()
+
+	return ctx, cancel
+}
+
 func main() {
 
 	PrintBanner()
 
 	_, _ = cfmt.Println(cfmt.Sprintf("[*] Starting at: %v", time.Now().Format(time.Stamp)))
+
+	// Setup signal handler for graceful shutdown
+	ctx, cancel := setupSignalHandler()
+	defer cancel()
 
 	p := flags.NewParser(&opts, flags.PrintErrors|flags.PassDoubleDash|flags.HelpFlag)
 	p.SubcommandsOptional = true
@@ -264,6 +294,7 @@ func main() {
 	mergeConfigWithFlags(cfg)
 
 	var parseParams = data.ParseParams{
+		Ctx:                ctx,
 		LogPath:            opts.Events.Path,
 		WlPath:             opts.External.Whitelist,
 		OnlyMass:           opts.MassStorage,
@@ -381,6 +412,11 @@ func main() {
 	}
 
 	if err != nil {
+		// Check if error is due to context cancellation
+		if errors.Is(err, context.Canceled) {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Operation cancelled by user}}::yellow", time.Now().Format(time.Stamp)))
+			os.Exit(130) // Standard exit code for SIGINT
+		}
 		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
 		os.Exit(1)
 	}

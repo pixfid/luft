@@ -43,10 +43,17 @@ func LocalEvents(params data.ParseParams) error {
 
 	// Use streaming parser if flag is enabled (memory-efficient for large logs)
 	if params.Streaming {
-		recordTypes = ParseFilesStreaming(list, params.Workers)
+		recordTypes = ParseFilesStreaming(params.Ctx, list, params.Workers)
 		PrintMemoryStats("after streaming parse")
 	} else {
-		recordTypes = ParseFilesWithWorkers(list, params.Workers)
+		recordTypes = ParseFilesWithWorkers(params.Ctx, list, params.Workers)
+	}
+
+	// Check if context was cancelled during parsing
+	select {
+	case <-params.Ctx.Done():
+		return params.Ctx.Err()
+	default:
 	}
 
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Found %d events records}}::green", time.Now().Format(time.Stamp), len(recordTypes)))
