@@ -51,4 +51,5 @@ type ParseParams struct {
 	SSHKeyPath         string
 	SSHTimeout         int
 	InsecureSSH        bool
+	Workers            int
 }

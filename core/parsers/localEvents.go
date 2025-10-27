@@ -34,7 +34,7 @@ func LocalEvents(params data.ParseParams) error {
 	}
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Loaded %d logs files}}::green", time.Now().Format(time.Stamp), len(list)))
 
-	recordTypes := ParseFiles(list)
+	recordTypes := ParseFilesWithWorkers(list, params.Workers)
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Found %d events records}}::green", time.Now().Format(time.Stamp), len(recordTypes)))
 
 	events := CollectEventsData(recordTypes)

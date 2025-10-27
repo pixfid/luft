@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/i582/cfmt/cmd/cfmt"
@@ -124,7 +126,157 @@ func parseGzipped(path string) []data.LogEvent {
 	return parseLine(bufio.NewScanner(gz))
 }
 
+// fileJob represents a file parsing job
+type fileJob struct {
+	path  string
+	index int // to preserve order
+}
+
+// fileResult represents the result of parsing a file
+type fileResult struct {
+	events []data.LogEvent
+	index  int
+	err    error
+}
+
+// ParseFiles parses log files in parallel using a worker pool
 func ParseFiles(files []string) []data.LogEvent {
+	return ParseFilesWithWorkers(files, 0)
+}
+
+// ParseFilesWithWorkers parses log files in parallel with specified number of workers
+// If workers <= 0, uses runtime.NumCPU()
+func ParseFilesWithWorkers(files []string, workers int) []data.LogEvent {
+	if len(files) == 0 {
+		return []data.LogEvent{}
+	}
+
+	startTime := time.Now()
+
+	// Determine worker count
+	numWorkers := workers
+	if numWorkers <= 0 {
+		numWorkers = runtime.NumCPU()
+	}
+
+	// Cap at file count (no point having more workers than files)
+	if numWorkers > len(files) {
+		numWorkers = len(files)
+	}
+
+	// If only one file or one worker, use sequential parsing for simplicity
+	if numWorkers == 1 || len(files) == 1 {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Parsing %d log file(s) sequentially...}}::cyan",
+			time.Now().Format(time.Stamp), len(files)))
+		events := ParseFilesSequential(files)
+		duration := time.Since(startTime)
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ Parsed %d events from %d file(s) in %v}}::green",
+			time.Now().Format(time.Stamp), len(events), len(files), duration))
+		return events
+	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Parsing %d log files using %d workers...}}::cyan",
+		time.Now().Format(time.Stamp), len(files), numWorkers))
+
+	// Create channels
+	jobs := make(chan fileJob, len(files))
+	results := make(chan fileResult, len(files))
+
+	// Start workers
+	var wg sync.WaitGroup
+	for w := 1; w <= numWorkers; w++ {
+		wg.Add(1)
+		go parseWorker(w, jobs, results, &wg)
+	}
+
+	// Send jobs
+	for i, file := range files {
+		jobs <- fileJob{path: file, index: i}
+	}
+	close(jobs)
+
+	// Wait for workers and close results
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	fileResults := make([]fileResult, 0, len(files))
+	for result := range results {
+		if result.err != nil {
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: failed to parse file: %s}}::yellow",
+				time.Now().Format(time.Stamp), result.err.Error()))
+		}
+		fileResults = append(fileResults, result)
+	}
+
+	// Sort results by original index to preserve order
+	sortFileResults(fileResults)
+
+	// Aggregate all events
+	totalEvents := 0
+	for _, fr := range fileResults {
+		totalEvents += len(fr.events)
+	}
+
+	allEvents := make([]data.LogEvent, 0, totalEvents)
+	for _, fr := range fileResults {
+		allEvents = append(allEvents, fr.events...)
+	}
+
+	duration := time.Since(startTime)
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ Parsed %d events from %d files in %v}}::green",
+		time.Now().Format(time.Stamp), len(allEvents), len(files), duration))
+
+	return allEvents
+}
+
+// parseWorker is a worker that processes file parsing jobs
+func parseWorker(id int, jobs <-chan fileJob, results chan<- fileResult, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for job := range jobs {
+		var events []data.LogEvent
+		var err error
+
+		switch filepath.Ext(job.path) {
+		case ".gz":
+			events = parseGzipped(job.path)
+		default:
+			events = parseUGzipped(job.path)
+		}
+
+		// Check if parsing had errors (empty result might indicate error)
+		if len(events) == 0 {
+			// This is not necessarily an error, file might just be empty
+			// but parseGzipped/parseUGzipped don't return errors
+		}
+
+		results <- fileResult{
+			events: events,
+			index:  job.index,
+			err:    err,
+		}
+	}
+}
+
+// sortFileResults sorts file results by index to preserve original order
+func sortFileResults(results []fileResult) {
+	// Simple insertion sort for small slices (typically we have few files)
+	for i := 1; i < len(results); i++ {
+		key := results[i]
+		j := i - 1
+		for j >= 0 && results[j].index > key.index {
+			results[j+1] = results[j]
+			j--
+		}
+		results[j+1] = key
+	}
+}
+
+// ParseFilesSequential parses files sequentially (legacy fallback)
+func ParseFilesSequential(files []string) []data.LogEvent {
 	var recordTypes []data.LogEvent
 
 	for _, file := range files {
