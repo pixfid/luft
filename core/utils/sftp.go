@@ -4,7 +4,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -40,7 +39,7 @@ func GetHostKeyCallback(insecure bool) (ssh.HostKeyCallback, error) {
 // LoadSSHPrivateKey loads SSH private key from file
 // Supports RSA, ECDSA, ED25519 keys with or without passphrase
 func LoadSSHPrivateKey(keyPath string, passphrase []byte) (ssh.Signer, error) {
-	keyData, err := ioutil.ReadFile(keyPath)
+	keyData, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read SSH key file: %w", err)
 	}

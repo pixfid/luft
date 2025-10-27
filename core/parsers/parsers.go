@@ -498,17 +498,27 @@ func ParseFilesStreaming(files []string, workers int) []data.LogEvent {
 	return allEvents
 }
 
+// Parser states for USB device event collection
+const (
+	stateNone = iota
+	stateNewDevice
+	stateExpectProduct
+	stateExpectManufacturer
+	stateExpectSerial
+	stateExpectStorage
+)
+
 // CollectEventsData collect data from events logs.
 func CollectEventsData(events []data.LogEvent) []data.Event {
-	var curr = -1
-	var link int
-	var interrupted bool
+	var currentIndex = -1
+	var state = stateNone
 	allEvents := make([]data.Event, 0)
 
 	for _, event := range events {
-		if event.ActionType == data.Connected {
-			switch {
-			case strings.Contains(event.LogLine, "New USB device found, "):
+		switch event.ActionType {
+		case data.Connected:
+			// Check for new USB device connection
+			if strings.Contains(event.LogLine, "New USB device found, ") {
 				host := utils.Submatch(reHost, event.LogLine, 2)
 				vid := utils.Submatch(reVid, event.LogLine, 1)
 				pid := utils.Submatch(rePid, event.LogLine, 1)
@@ -526,47 +536,49 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 					DisconnectionTime: time.Now(),
 				})
 
-				curr++
-				link = 2
-				interrupted = false
-
-			case !interrupted:
-				switch {
-				case link == 2:
-					prod := utils.Submatch(reProduct, event.LogLine, 1)
-					if prod == "" {
-						interrupted = true
-					} else {
-						allEvents[curr].ProductName = prod
-						link = 3
-					}
-				case link == 3:
-					manufacture := utils.Submatch(reManufacture, event.LogLine, 1)
-					if manufacture == "" {
-						interrupted = true
-					} else {
-						allEvents[curr].ManufacturerName = manufacture
-						link = 4
-					}
-				case link == 4:
-					serial := utils.Submatch(reSerial, event.LogLine, 1)
-					if serial == "" {
-						interrupted = true
-					} else {
-						allEvents[curr].SerialNumber = serial
-						link = 5
-					}
-				case link == 5:
-					storage := utils.Submatch(reUSBStorageMatch, event.LogLine, 1)
-					if storage != "" {
-						allEvents[curr].IsMassStorage = true
-					}
-					interrupted = true
-				}
-			default:
+				currentIndex++
+				state = stateExpectProduct
 				continue
 			}
-		} else if event.ActionType == data.Disconnected {
+
+			// Process device attributes based on current state
+			if currentIndex < 0 || state == stateNone {
+				continue
+			}
+
+			switch state {
+			case stateExpectProduct:
+				if prod := utils.Submatch(reProduct, event.LogLine, 1); prod != "" {
+					allEvents[currentIndex].ProductName = prod
+					state = stateExpectManufacturer
+				} else {
+					state = stateNone
+				}
+
+			case stateExpectManufacturer:
+				if manufacture := utils.Submatch(reManufacture, event.LogLine, 1); manufacture != "" {
+					allEvents[currentIndex].ManufacturerName = manufacture
+					state = stateExpectSerial
+				} else {
+					state = stateNone
+				}
+
+			case stateExpectSerial:
+				if serial := utils.Submatch(reSerial, event.LogLine, 1); serial != "" {
+					allEvents[currentIndex].SerialNumber = serial
+					state = stateExpectStorage
+				} else {
+					state = stateNone
+				}
+
+			case stateExpectStorage:
+				if storage := utils.Submatch(reUSBStorageMatch, event.LogLine, 1); storage != "" {
+					allEvents[currentIndex].IsMassStorage = true
+				}
+				state = stateNone
+			}
+
+		case data.Disconnected:
 			port := utils.Submatch(rePort, event.LogLine, 1)
 			if port != "" {
 				for i := range allEvents {

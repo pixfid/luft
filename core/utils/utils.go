@@ -5,7 +5,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -353,7 +352,7 @@ func ExportData(events []data.Event, format string, fileName string) error {
 	}
 
 	if exportData != nil {
-		err := ioutil.WriteFile(fn, exportData, fs.ModePerm)
+		err := os.WriteFile(fn, exportData, fs.ModePerm)
 		if err != nil {
 			return fmt.Errorf("failed to write file %s: %w", fn, err)
 		}

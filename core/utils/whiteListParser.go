@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,7 +31,7 @@ func WhiteListSerialInfo(serial string) *Serial {
 }
 
 func LoadWhiteList(wlPath string) error {
-	content, err := ioutil.ReadFile(wlPath)
+	content, err := os.ReadFile(wlPath)
 	if err != nil {
 		return err
 	}
