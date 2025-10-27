@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/i582/cfmt/cmd/cfmt"
@@ -291,6 +292,212 @@ func ParseFilesSequential(files []string) []data.LogEvent {
 	return recordTypes
 }
 
+// StreamingParser manages streaming log parsing with memory efficiency
+type StreamingParser struct {
+	files       []string
+	workers     int
+	events      chan data.LogEvent
+	errors      chan error
+	done        chan struct{}
+	eventsCount atomic.Int64
+	filesCount  atomic.Int64
+}
+
+// NewStreamingParser creates a new streaming parser
+func NewStreamingParser(files []string, workers int) *StreamingParser {
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
+	if workers > len(files) {
+		workers = len(files)
+	}
+
+	return &StreamingParser{
+		files:   files,
+		workers: workers,
+		events:  make(chan data.LogEvent, 1000), // Buffered for backpressure
+		errors:  make(chan error, workers),
+		done:    make(chan struct{}),
+	}
+}
+
+// Start begins streaming parsing
+func (sp *StreamingParser) Start() {
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Starting streaming parser with %d workers (memory-efficient mode)...}}::cyan",
+		time.Now().Format(time.Stamp), sp.workers))
+
+	jobs := make(chan string, len(sp.files))
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for w := 1; w <= sp.workers; w++ {
+		wg.Add(1)
+		go sp.streamWorker(w, jobs, &wg)
+	}
+
+	// Send jobs
+	go func() {
+		for _, file := range sp.files {
+			jobs <- file
+		}
+		close(jobs)
+	}()
+
+	// Wait for workers and close channels
+	go func() {
+		wg.Wait()
+		close(sp.events)
+		close(sp.errors)
+		close(sp.done)
+	}()
+}
+
+// streamWorker processes files and streams events
+func (sp *StreamingParser) streamWorker(id int, jobs <-chan string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for filePath := range jobs {
+		if err := sp.streamFile(filePath); err != nil {
+			select {
+			case sp.errors <- fmt.Errorf("worker %d failed to parse %s: %w", id, filePath, err):
+			default:
+				// Error channel full, skip
+			}
+		}
+		sp.filesCount.Add(1)
+	}
+}
+
+// streamFile parses a single file and streams events
+func (sp *StreamingParser) streamFile(path string) error {
+	var scanner *bufio.Scanner
+
+	if filepath.Ext(path) == ".gz" {
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		gz, err := gzip.NewReader(file)
+		if err != nil {
+			return err
+		}
+		defer gz.Close()
+
+		scanner = bufio.NewScanner(gz)
+	} else {
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		scanner = bufio.NewScanner(file)
+	}
+
+	// Configure scanner for large lines
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	// Stream events line by line
+	for scanner.Scan() {
+		logLine := scanner.Text()
+
+		// Check if line contains USB events
+		if reUSB.MatchString(logLine) || reUSBStorage.MatchString(logLine) {
+			logTime := utils.Submatch(reTimestamp, logLine, 1)
+			dateTime := utils.TimeStampToTime(logTime)
+			eventType := utils.GetActionType(logLine)
+
+			if eventType != data.Unknown {
+				event := data.LogEvent{
+					Date:       dateTime,
+					ActionType: eventType,
+					LogLine:    logLine,
+				}
+
+				// Send event to channel (blocks if consumer is slow - backpressure)
+				sp.events <- event
+				sp.eventsCount.Add(1)
+			}
+		}
+	}
+
+	return scanner.Err()
+}
+
+// Events returns the events channel for consumption
+func (sp *StreamingParser) Events() <-chan data.LogEvent {
+	return sp.events
+}
+
+// Errors returns the errors channel
+func (sp *StreamingParser) Errors() <-chan error {
+	return sp.errors
+}
+
+// Done returns the done channel
+func (sp *StreamingParser) Done() <-chan struct{} {
+	return sp.done
+}
+
+// Stats returns current parsing statistics
+func (sp *StreamingParser) Stats() (events int64, files int64) {
+	return sp.eventsCount.Load(), sp.filesCount.Load()
+}
+
+// ParseFilesStreaming parses files in streaming mode and returns all events
+// This is a convenience wrapper that collects all events
+func ParseFilesStreaming(files []string, workers int) []data.LogEvent {
+	if len(files) == 0 {
+		return []data.LogEvent{}
+	}
+
+	startTime := time.Now()
+
+	parser := NewStreamingParser(files, workers)
+	parser.Start()
+
+	// Collect events
+	var allEvents []data.LogEvent
+
+	// Monitor progress
+	progressTicker := time.NewTicker(2 * time.Second)
+	defer progressTicker.Stop()
+
+	collecting := true
+	for collecting {
+		select {
+		case event, ok := <-parser.Events():
+			if !ok {
+				collecting = false
+				break
+			}
+			allEvents = append(allEvents, event)
+
+		case err := <-parser.Errors():
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: %s}}::yellow",
+				time.Now().Format(time.Stamp), err.Error()))
+
+		case <-progressTicker.C:
+			eventCount, fileCount := parser.Stats()
+			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Progress: %d files processed, %d events found...}}::cyan",
+				time.Now().Format(time.Stamp), fileCount, eventCount))
+		}
+	}
+
+	// Wait for completion
+	<-parser.Done()
+
+	duration := time.Since(startTime)
+	eventCount, fileCount := parser.Stats()
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ Streaming parse complete: %d events from %d files in %v}}::green",
+		time.Now().Format(time.Stamp), eventCount, fileCount, duration))
+
+	return allEvents
+}
+
 // CollectEventsData collect data from events logs.
 func CollectEventsData(events []data.LogEvent) []data.Event {
 	var curr = -1
@@ -371,4 +578,36 @@ func CollectEventsData(events []data.LogEvent) []data.Event {
 		}
 	}
 	return allEvents
+}
+
+// GetMemStats returns current memory statistics
+func GetMemStats() runtime.MemStats {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m
+}
+
+// FormatBytes formats bytes to human-readable format
+func FormatBytes(bytes uint64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := uint64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// PrintMemoryStats prints current memory usage
+func PrintMemoryStats(label string) {
+	m := GetMemStats()
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Memory %s: Alloc=%s TotalAlloc=%s Sys=%s NumGC=%d}}::cyan",
+		time.Now().Format(time.Stamp), label,
+		FormatBytes(m.Alloc),
+		FormatBytes(m.TotalAlloc),
+		FormatBytes(m.Sys),
+		m.NumGC))
 }

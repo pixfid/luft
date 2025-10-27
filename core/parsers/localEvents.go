@@ -34,7 +34,21 @@ func LocalEvents(params data.ParseParams) error {
 	}
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Loaded %d logs files}}::green", time.Now().Format(time.Stamp), len(list)))
 
-	recordTypes := ParseFilesWithWorkers(list, params.Workers)
+	// Print initial memory stats
+	if params.Streaming {
+		PrintMemoryStats("before parsing")
+	}
+
+	var recordTypes []data.LogEvent
+
+	// Use streaming parser if flag is enabled (memory-efficient for large logs)
+	if params.Streaming {
+		recordTypes = ParseFilesStreaming(list, params.Workers)
+		PrintMemoryStats("after streaming parse")
+	} else {
+		recordTypes = ParseFilesWithWorkers(list, params.Workers)
+	}
+
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Found %d events records}}::green", time.Now().Format(time.Stamp), len(recordTypes)))
 
 	events := CollectEventsData(recordTypes)

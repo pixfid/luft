@@ -23,6 +23,7 @@ var opts struct {
 	ConfigFile       string `long:"config" env:"LUFT_CONFIG" description:"path to config file (YAML)"`
 	UpdateUSBIDs     bool   `long:"update-usbids" description:"download and update USB IDs database"`
 	ClearCache       bool   `long:"clear-cache" description:"clear USB IDs cache and exit"`
+	Streaming        bool   `long:"streaming" env:"STREAMING" description:"use streaming parser for memory-efficient processing of large logs"`
 	Workers          int    `short:"w" long:"workers" env:"WORKERS" description:"number of worker threads for parallel parsing (default: CPU cores)" default:"0"`
 	MassStorage      bool   `short:"m" long:"masstorage" env:"MASSTORAGE" description:"show only mass storage devices"`
 	Untrusted        bool   `short:"u" long:"untrusted" env:"UNTRUSTED" description:"show only untrusted devices"`
@@ -282,6 +283,7 @@ func main() {
 		SSHTimeout:         opts.Events.Remote.Timeout,
 		InsecureSSH:        opts.Events.Remote.InsecureSSH,
 		Workers:            opts.Workers,
+		Streaming:          opts.Streaming,
 	}
 
 	// Load whitelist if needed

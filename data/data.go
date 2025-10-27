@@ -52,4 +52,5 @@ type ParseParams struct {
 	SSHTimeout         int
 	InsecureSSH        bool
 	Workers            int
+	Streaming          bool
 }
