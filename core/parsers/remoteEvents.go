@@ -13,6 +13,7 @@ import (
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
 	"github.com/pkg/sftp"
+	"github.com/schollz/progressbar/v3"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -107,10 +108,33 @@ func RemoteEvents(params data.ParseParams) error {
 	readFile := func(path []string, client *sftp.Client) error {
 		var recordTypes []data.LogEvent
 
-		for _, s := range path {
+		// Create progress bar for remote file processing (only if >= 5 files)
+		var bar *progressbar.ProgressBar
+		if len(path) >= 5 {
+			bar = progressbar.NewOptions(len(path),
+				progressbar.OptionSetDescription("Processing remote files"),
+				progressbar.OptionSetWidth(40),
+				progressbar.OptionShowCount(),
+				progressbar.OptionSetTheme(progressbar.Theme{
+					Saucer:        "=",
+					SaucerHead:    ">",
+					SaucerPadding: " ",
+					BarStart:      "[",
+					BarEnd:        "]",
+				}),
+				progressbar.OptionOnCompletion(func() {
+					fmt.Println()
+				}),
+			)
+		}
+
+		for idx, s := range path {
 			// Check context cancellation before processing each file
 			select {
 			case <-params.Ctx.Done():
+				if bar != nil {
+					bar.Clear()
+				}
 				return params.Ctx.Err()
 			default:
 			}
@@ -160,6 +184,20 @@ func RemoteEvents(params data.ParseParams) error {
 					}
 				}
 			}(s)
+
+			// Update progress bar
+			if bar != nil {
+				bar.Add(1)
+			} else if len(path) < 5 {
+				// Show text progress for small file counts
+				_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Processed %d/%d remote files...}}::cyan",
+					time.Now().Format(time.Stamp), idx+1, len(path)))
+			}
+		}
+
+		// Finish progress bar
+		if bar != nil {
+			bar.Finish()
 		}
 
 		if len(recordTypes) == 0 {

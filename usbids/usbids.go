@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/i582/cfmt/cmd/cfmt"
+	"github.com/schollz/progressbar/v3"
 )
 
 var (
@@ -397,30 +398,20 @@ func downloadUSBIDs(url, targetPath string) error {
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath) // Clean up temp file
 
-	// Create progress reader
-	var lastProgress int
-	progressReader := &ProgressReader{
-		Reader: resp.Body,
-		Total:  contentLength,
-		OnProgress: func(current, total int64) {
-			if total > 0 {
-				progress := int(float64(current) / float64(total) * 100)
-				// Update every 5%
-				if progress-lastProgress >= 5 || progress == 100 {
-					_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Downloaded: %d%%}}::cyan",
-						time.Now().Format(time.Stamp), progress))
-					lastProgress = progress
-				}
-			}
-		},
-	}
+	// Create progress bar for download
+	bar := progressbar.DefaultBytes(
+		contentLength,
+		"Downloading USB IDs",
+	)
 
-	// Download to temp file
-	_, err = io.Copy(tmpFile, progressReader)
+	// Download to temp file with progress bar
+	_, err = io.Copy(io.MultiWriter(tmpFile, bar), resp.Body)
 	tmpFile.Close()
 	if err != nil {
 		return fmt.Errorf("failed to download file: %w", err)
 	}
+
+	fmt.Println() // New line after progress bar
 
 	// Ensure target directory exists
 	targetDir := filepath.Dir(targetPath)

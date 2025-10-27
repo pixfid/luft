@@ -17,6 +17,7 @@ import (
 	"github.com/i582/cfmt/cmd/cfmt"
 	"github.com/pixfid/luft/core/utils"
 	"github.com/pixfid/luft/data"
+	"github.com/schollz/progressbar/v3"
 )
 
 // Compiled regular expressions for log parsing (performance optimization)
@@ -209,14 +210,48 @@ func ParseFilesWithWorkers(ctx context.Context, files []string, workers int) []d
 		close(results)
 	}()
 
+	// Create progress bar for file processing (only if >= 5 files)
+	var bar *progressbar.ProgressBar
+	if len(files) >= 5 {
+		bar = progressbar.NewOptions(len(files),
+			progressbar.OptionSetDescription("Parsing files"),
+			progressbar.OptionSetWidth(40),
+			progressbar.OptionShowCount(),
+			progressbar.OptionShowIts(),
+			progressbar.OptionSetTheme(progressbar.Theme{
+				Saucer:        "=",
+				SaucerHead:    ">",
+				SaucerPadding: " ",
+				BarStart:      "[",
+				BarEnd:        "]",
+			}),
+			progressbar.OptionOnCompletion(func() {
+				fmt.Println()
+			}),
+		)
+	}
+
 	// Collect results
 	fileResults := make([]fileResult, 0, len(files))
 	for result := range results {
 		if result.err != nil {
+			if bar != nil {
+				bar.Clear()
+			}
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: failed to parse file: %s}}::yellow",
 				time.Now().Format(time.Stamp), result.err.Error()))
 		}
 		fileResults = append(fileResults, result)
+
+		// Update progress bar
+		if bar != nil {
+			bar.Add(1)
+		}
+	}
+
+	// Finish progress bar
+	if bar != nil {
+		bar.Finish()
 	}
 
 	// Sort results by original index to preserve order
@@ -518,15 +553,41 @@ func ParseFilesStreaming(ctx context.Context, files []string, workers int) []dat
 	// Collect events
 	var allEvents []data.LogEvent
 
+	// Create progress bar for streaming (only if >= 5 files)
+	var bar *progressbar.ProgressBar
+	if len(files) >= 5 {
+		bar = progressbar.NewOptions(len(files),
+			progressbar.OptionSetDescription("Streaming files"),
+			progressbar.OptionSetWidth(40),
+			progressbar.OptionShowCount(),
+			progressbar.OptionShowIts(),
+			progressbar.OptionSetTheme(progressbar.Theme{
+				Saucer:        "=",
+				SaucerHead:    ">",
+				SaucerPadding: " ",
+				BarStart:      "[",
+				BarEnd:        "]",
+			}),
+			progressbar.OptionOnCompletion(func() {
+				fmt.Println()
+			}),
+		)
+	}
+
 	// Monitor progress
-	progressTicker := time.NewTicker(2 * time.Second)
+	progressTicker := time.NewTicker(500 * time.Millisecond)
 	defer progressTicker.Stop()
+
+	lastFileCount := int64(0)
 
 	collecting := true
 	for collecting {
 		select {
 		case <-ctx.Done():
 			// Context cancelled, stop collecting
+			if bar != nil {
+				bar.Clear()
+			}
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Streaming parse cancelled}}::yellow", time.Now().Format(time.Stamp)))
 			collecting = false
 
@@ -538,14 +599,32 @@ func ParseFilesStreaming(ctx context.Context, files []string, workers int) []dat
 			allEvents = append(allEvents, event)
 
 		case err := <-parser.Errors():
+			if bar != nil {
+				bar.Clear()
+			}
 			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: %s}}::yellow",
 				time.Now().Format(time.Stamp), err.Error()))
 
 		case <-progressTicker.C:
 			eventCount, fileCount := parser.Stats()
-			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Progress: %d files processed, %d events found...}}::cyan",
-				time.Now().Format(time.Stamp), fileCount, eventCount))
+			// Update progress bar if file count changed
+			if bar != nil && fileCount > lastFileCount {
+				delta := fileCount - lastFileCount
+				bar.Add(int(delta))
+				lastFileCount = fileCount
+				// Update description with event count
+				bar.Describe(fmt.Sprintf("Streaming files (%d events)", eventCount))
+			} else if bar == nil {
+				// Fallback to text progress for small file counts
+				_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Progress: %d/%d files, %d events...}}::cyan",
+					time.Now().Format(time.Stamp), fileCount, len(files), eventCount))
+			}
 		}
+	}
+
+	// Finish progress bar
+	if bar != nil {
+		bar.Finish()
 	}
 
 	// Wait for completion
