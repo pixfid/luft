@@ -22,6 +22,7 @@ const (
 var opts struct {
 	ConfigFile       string `long:"config" env:"LUFT_CONFIG" description:"path to config file (YAML)"`
 	UpdateUSBIDs     bool   `long:"update-usbids" description:"download and update USB IDs database"`
+	ClearCache       bool   `long:"clear-cache" description:"clear USB IDs cache and exit"`
 	MassStorage      bool   `short:"m" long:"masstorage" env:"MASSTORAGE" description:"show only mass storage devices"`
 	Untrusted        bool   `short:"u" long:"untrusted" env:"UNTRUSTED" description:"show only untrusted devices"`
 	Number           int    `short:"n" long:"number" env:"NUMBER" description:"number of events to show"`
@@ -168,6 +169,23 @@ func handleUSBIDsUpdate() {
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] To use this database, run luft with: --usbids=%s}}::cyan", time.Now().Format(time.Stamp), targetPath))
 }
 
+// handleClearCache handles the --clear-cache flag
+func handleClearCache() {
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cache Clear Mode}}::cyan|bold", time.Now().Format(time.Stamp)))
+
+	// Get USB IDs path
+	usbIdsPath := opts.External.UsbIds
+
+	// Try to clear cache
+	if err := usbids.ClearCache(usbIdsPath); err != nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ERROR: Failed to clear cache: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
+		os.Exit(1)
+	}
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ Cache cleared successfully!}}::green|bold", time.Now().Format(time.Stamp)))
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Next load will parse from source and rebuild cache}}::cyan", time.Now().Format(time.Stamp)))
+}
+
 // isWritable checks if a path is writable
 func isWritable(path string) bool {
 	// Check if file exists
@@ -217,6 +235,12 @@ func main() {
 	// Handle USB IDs update flag
 	if opts.UpdateUSBIDs {
 		handleUSBIDsUpdate()
+		return
+	}
+
+	// Handle cache clear flag
+	if opts.ClearCache {
+		handleClearCache()
 		return
 	}
 

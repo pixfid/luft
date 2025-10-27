@@ -2,6 +2,8 @@ package usbids
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,6 +38,16 @@ type Vendor struct {
 type Product struct {
 	ID   string
 	Name string
+}
+
+// CacheData represents cached USB IDs data
+type CacheData struct {
+	Vendors     map[string]*Vendor
+	Version     string
+	Date        string
+	SourceHash  string    // MD5 hash of source file
+	CachedAt    time.Time // When cache was created
+	SourceMTime time.Time // Modification time of source file
 }
 
 func LoadFromFiles() error {
@@ -111,13 +123,45 @@ func ParseUsbIDs(file *os.File) error {
 }
 
 func LoadFromFile(path string) error {
+	startTime := time.Now()
+
+	// Try to load from cache first
+	if cached, err := loadFromCache(path); err == nil && cached {
+		duration := time.Since(startTime)
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ⚡ Loaded from cache in %v (fast!)}}::green",
+			time.Now().Format(time.Stamp), duration))
+		return nil
+	}
+
+	// Cache miss or invalid, parse from source
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Parsing USB IDs from source...}}::yellow",
+		time.Now().Format(time.Stamp)))
+
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	return ParseUsbIDs(file)
+	if err := ParseUsbIDs(file); err != nil {
+		return err
+	}
+
+	// Save to cache for next time
+	if err := saveToCache(path); err != nil {
+		// Non-fatal error, just log it
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Warning: failed to save cache: %s}}::yellow",
+			time.Now().Format(time.Stamp), err.Error()))
+	} else {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ Cache saved for faster next load}}::cyan",
+			time.Now().Format(time.Stamp)))
+	}
+
+	duration := time.Since(startTime)
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Total load time: %v}}::cyan",
+		time.Now().Format(time.Stamp), duration))
+
+	return nil
 }
 
 func FindDevice(vid, pid string) (string, string) {
@@ -134,6 +178,140 @@ func FindDevice(vid, pid string) (string, string) {
 	}
 
 	return "", ""
+}
+
+// getCachePath returns the cache file path for a given USB IDs file
+func getCachePath(sourcePath string) string {
+	return sourcePath + ".cache"
+}
+
+// getFileHash calculates MD5 hash of a file (first 1MB only for performance)
+func getFileHash(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	// Only hash first 1MB for performance
+	_, err = io.CopyN(hash, file, 1024*1024)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+// loadFromCache attempts to load cached USB IDs data
+func loadFromCache(sourcePath string) (bool, error) {
+	cachePath := getCachePath(sourcePath)
+
+	// Check if cache file exists
+	cacheInfo, err := os.Stat(cachePath)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if source file exists and get its info
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return false, err
+	}
+
+	// If source is newer than cache, invalidate cache
+	if sourceInfo.ModTime().After(cacheInfo.ModTime()) {
+		return false, fmt.Errorf("cache outdated: source modified at %v, cache at %v",
+			sourceInfo.ModTime(), cacheInfo.ModTime())
+	}
+
+	// Load cache file
+	cacheFile, err := os.Open(cachePath)
+	if err != nil {
+		return false, err
+	}
+	defer cacheFile.Close()
+
+	// Decode cache data
+	var cache CacheData
+	decoder := gob.NewDecoder(cacheFile)
+	if err := decoder.Decode(&cache); err != nil {
+		return false, fmt.Errorf("failed to decode cache: %w", err)
+	}
+
+	// Verify source file hash matches
+	currentHash, err := getFileHash(sourcePath)
+	if err != nil {
+		return false, err
+	}
+
+	if currentHash != cache.SourceHash {
+		return false, fmt.Errorf("cache hash mismatch: expected %s, got %s", cache.SourceHash, currentHash)
+	}
+
+	// Cache is valid, load data into global variables
+	vendors = cache.Vendors
+	Version = cache.Version
+	Date = cache.Date
+
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] usb.ids loaded from cache: %s, Version: %s, Date: %s}}::green",
+		time.Now().Format(time.Stamp), cachePath, Version, Date))
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] usb.ids %d vendors loaded}}::green", time.Now().Format(time.Stamp),
+		len(vendors)))
+
+	return true, nil
+}
+
+// saveToCache saves current USB IDs data to cache
+func saveToCache(sourcePath string) error {
+	cachePath := getCachePath(sourcePath)
+
+	// Get source file info
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return err
+	}
+
+	// Calculate source file hash
+	sourceHash, err := getFileHash(sourcePath)
+	if err != nil {
+		return err
+	}
+
+	// Create cache data
+	cache := CacheData{
+		Vendors:     vendors,
+		Version:     Version,
+		Date:        Date,
+		SourceHash:  sourceHash,
+		CachedAt:    time.Now(),
+		SourceMTime: sourceInfo.ModTime(),
+	}
+
+	// Create cache file
+	cacheFile, err := os.Create(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to create cache file: %w", err)
+	}
+	defer cacheFile.Close()
+
+	// Encode cache data
+	encoder := gob.NewEncoder(cacheFile)
+	if err := encoder.Encode(&cache); err != nil {
+		return fmt.Errorf("failed to encode cache: %w", err)
+	}
+
+	return nil
+}
+
+// ClearCache removes cache file for a given USB IDs file
+func ClearCache(sourcePath string) error {
+	cachePath := getCachePath(sourcePath)
+	if err := os.Remove(cachePath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Cache cleared: %s}}::green", time.Now().Format(time.Stamp), cachePath))
+	return nil
 }
 
 // ProgressReader tracks download progress
