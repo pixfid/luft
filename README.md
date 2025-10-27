@@ -13,47 +13,82 @@ with reduced functionality (custom log directory)
 
 ## Help
 
-```
-$ ./luft -h
+```bash
+$ ./luft --help
+
+LUFT - Linux USB Forensic Tool
 
 Usage:
-  luft [OPTIONS]
+  luft [command]
 
-Application Options:
-      --config=                               path to config file (YAML) [$LUFT_CONFIG]
-      --update-usbids                         download and update USB IDs database
-      --clear-cache                           clear USB IDs cache and exit
-      --streaming                             use streaming parser for memory-efficient processing of large logs [$STREAMING]
-  -w, --workers=                              number of worker threads for parallel parsing (default: CPU cores) [$WORKERS]
-  -m, --masstorage                            show only mass storage devices [$MASSTORAGE]
-  -u, --untrusted                             show only untrusted devices [$UNTRUSTED]
-  -n, --number=                               number of events to show [$NUMBER]
-  -s, --sort=[asc|desc]                       sort events (default: asc) [$SORT]
-  -e, --export                                export events [$EXPORT]
-  -c, --check                                 check devices for whitelist [$CHECK]
-  -W, --whitelist=                            external whitelist path [$WHITELIST]
-  -U, --usbids=                               usbids path (default: /var/lib/usbutils/usb.ids) [$USBIDS]
+Available Commands:
+  cache       Manage USB IDs cache
+  completion  Generate shell autocompletion
+  events      Collect and analyze USB device events
+  help        Help about any command
+  update      Update USB IDs database
 
-events:
-  -S, --events.source=[local|remote|database] events target
-      --events.remote-host=                   remote host name from config file [$REMOTE_HOST]
-      --events.path=                          log directory (default: /var/log/)
+Flags:
+      --config string   config file (default: ~/.luft.yaml)
+  -h, --help            help for luft
+  -v, --version         version for luft
 
-export:
-  -F, --events.export.format=[json|xml|pdf]   events export format (default: pdf) [$EVENTS_EXPORT_FORMAT]
-  -N, --events.export.filename=               events export file name (default: events_data) [$EVENTS_EXPORT_FILENAME]
+Use "luft [command] --help" for more information about a command.
+```
 
-remote:
-  -I, --events.remote.ip=                     ip address [$EVENTS_REMOTE_IP]
-      --events.remote.port=                   ssh port (default: 22) [$EVENTS_REMOTE_PORT]
-  -L, --events.remote.login=                  login [$EVENTS_REMOTE_LOGIN]
-  -P, --events.remote.password=               password (deprecated, use SSH key instead) [$EVENTS_REMOTE_PASSWORD]
-  -K, --events.remote.ssh-key=                path to SSH private key (recommended) [$EVENTS_REMOTE_SSH_KEY]
-  -T, --events.remote.timeout=                SSH connection timeout in seconds (default: 30) [$EVENTS_REMOTE_TIMEOUT]
-      --events.remote.insecure-ssh            skip SSH host key verification (NOT RECOMMENDED) [$EVENTS_REMOTE_INSECURE_SSH]
+### Events Command
 
-Help Options:
-  -h, --help                                  Show this help message
+```bash
+$ ./luft events --help
+
+Collect USB device connection events from local or remote systems.
+
+Usage:
+  luft events [flags]
+
+Flags:
+  -S, --source string            event source (local, remote) [required]
+  -m, --mass-storage             show only mass storage devices
+  -u, --untrusted                show only untrusted devices
+  -c, --check-whitelist          check devices against whitelist
+  -n, --number int               number of events to show (0 = all)
+  -s, --sort string              sort events (asc, desc) (default "asc")
+  -e, --export                   export events
+  -F, --format string            export format (json, xml, pdf) (default "pdf")
+  -o, --output string            export filename (default "events_data")
+  -w, --workers int              number of worker threads (0 = auto)
+      --streaming                use streaming parser for large logs
+  -W, --whitelist string         whitelist file path
+  -U, --usbids string            USB IDs database path
+      --path string              log directory (default "/var/log/")
+      --remote-host string       remote host name from config
+  -I, --remote-ip string         remote host IP address
+  -L, --remote-login string      remote login username
+  -K, --remote-key string        path to SSH private key
+  -P, --remote-password string   remote password (deprecated)
+      --remote-port string       remote SSH port (default "22")
+  -T, --remote-timeout int       SSH timeout in seconds (default 30)
+      --insecure-ssh             skip SSH host key verification
+
+Use "luft events --help" for detailed examples.
+```
+
+### Shell Completion
+
+LUFT supports shell completion for bash, zsh, fish, and powershell:
+
+```bash
+# Bash
+./luft completion bash > /etc/bash_completion.d/luft
+
+# Zsh
+./luft completion zsh > ~/.zsh/completion/_luft
+
+# Fish
+./luft completion fish > ~/.config/fish/completions/luft.fish
+
+# PowerShell
+./luft completion powershell > luft.ps1
 ```
 
 ## Configuration File
@@ -136,26 +171,24 @@ LUFT uses the USB IDs database to identify device manufacturers and products. Ke
 
 ```bash
 # Update to default location (requires root/sudo for system paths)
-sudo ./luft --update-usbids
+sudo ./luft update
 
 # Update to custom location
-./luft --update-usbids --usbids=~/.local/share/luft/usb.ids
+./luft update --path ~/.local/share/luft/usb.ids
 
 # Use updated database
-./luft -S local --usbids=~/.local/share/luft/usb.ids
+./luft events --source local --usbids ~/.local/share/luft/usb.ids
 ```
 
 The update command will:
-1. Try multiple sources (usb-ids.gowly.com, GitHub, linux-usb.org)
-2. Show download progress
+1. Download from the official source (linux-usb.org)
+2. Show download progress with progress bar
 3. Verify the database by loading it
 4. Display version and date information
 5. Automatically create a cache file for faster subsequent loads
 
-**Sources (in order of priority):**
-- https://usb-ids.gowly.com/usb.ids
-- https://raw.githubusercontent.com/gentoo/hwids/master/usb.ids
-- http://www.linux-usb.org/usb.ids
+**Source:**
+- http://www.linux-usb.org/usb.ids (official USB ID Repository)
 
 **Note:** If the default path is not writable, the tool will automatically use `~/.local/share/luft/usb.ids` as an alternative.
 
@@ -181,11 +214,14 @@ LUFT automatically caches the parsed USB IDs database for **significantly faster
 
 ```bash
 # Clear cache (will be rebuilt on next load)
-./luft --clear-cache --usbids=/path/to/usb.ids
+./luft cache clear --usbids /path/to/usb.ids
+
+# Clear default cache
+./luft cache clear
 
 # Cache is automatically created, no manual action needed
-./luft -S local  # First run: parses and caches
-./luft -S local  # Subsequent runs: loads from cache
+./luft events --source local  # First run: parses and caches
+./luft events --source local  # Subsequent runs: loads from cache
 ```
 
 **Cache location:** Cache files are stored alongside the USB IDs file with `.cache` extension.
@@ -316,23 +352,36 @@ Examples
 
 #### Get USB event history (local):
 ```bash
-./luft -cm -S=local -W=99_PDAC_LOCAL_flash.rules
+./luft events --source local -cm -W 99_PDAC_LOCAL_flash.rules
 ```
 
 #### Get USB events from remote host (CLI flags):
 ```bash
-./luft -cm -W=99_PDAC_LOCAL_flash.rules -S=remote -I=10.211.55.11 -L=user -K=~/.ssh/id_rsa
+./luft events --source remote -cm -W 99_PDAC_LOCAL_flash.rules \
+  --remote-ip 10.211.55.11 --remote-login user --remote-key ~/.ssh/id_rsa
 ```
 
 #### Get USB events from remote host (using config):
 ```bash
 # First, setup ~/.luft.yaml with remote host details
-./luft -cm -S=remote --remote-host=prod-server
+./luft events --source remote -cm --remote-host prod-server
 ```
 
 #### Use custom config file:
 ```bash
-./luft --config=/path/to/custom.yaml -S=local
+./luft --config /path/to/custom.yaml events --source local
+```
+
+#### Streaming mode for large logs:
+```bash
+# Memory-efficient processing with progress bar
+./luft events --source local --streaming -w 8
+```
+
+#### Filter and export:
+```bash
+# Show only untrusted mass storage devices and export to PDF
+./luft events --source local -muc --export --format pdf --output report
 ```
 
 <img width="1274" alt="Screenshot 2021-05-06 at 17 58 18" src="https://user-images.githubusercontent.com/1672087/117387775-28842680-aef2-11eb-8bfd-cfa084db0f05.png">
@@ -341,7 +390,15 @@ Examples
 ### Export with various formats json, xml, pdf (with logo `stats.png`)
 
 #### Export USB event history
-```./luft -cmE -S=local -W=99_PDAC_LOCAL_flash.rules```
+```bash
+./luft events --source local -cme -W 99_PDAC_LOCAL_flash.rules
+
+# Export to JSON
+./luft events --source local --export --format json --output events
+
+# Export to XML
+./luft events --source local --export --format xml --output events
+```
 
 ### PDF Report example:
 <img width="1324" alt="Screenshot 2021-04-11 at 14 36 11" src="https://user-images.githubusercontent.com/1672087/114302784-4e750180-9ad3-11eb-9642-cc760bbf9c3f.png">

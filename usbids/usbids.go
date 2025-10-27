@@ -336,36 +336,25 @@ func (pr *ProgressReader) Read(p []byte) (int, error) {
 
 // UpdateUSBIDs downloads the latest USB IDs database
 func UpdateUSBIDs(targetPath string) error {
-	// USB IDs sources (in order of preference)
-	sources := []string{
-		"https://usb-ids.gowly.com/usb.ids",
-		"https://raw.githubusercontent.com/gentoo/hwids/master/usb.ids",
-		"http://www.linux-usb.org/usb.ids",
-	}
+	// Official USB IDs source
+	source := "http://www.linux-usb.org/usb.ids"
 
 	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Updating USB IDs database...}}::cyan", time.Now().Format(time.Stamp)))
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Downloading from: %s}}::yellow", time.Now().Format(time.Stamp), source))
 
-	var lastErr error
-	for _, source := range sources {
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Trying source: %s}}::yellow", time.Now().Format(time.Stamp), source))
-
-		err := downloadUSBIDs(source, targetPath)
-		if err == nil {
-			_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ USB IDs database successfully updated to: %s}}::green", time.Now().Format(time.Stamp), targetPath))
-
-			// Try to load and display version info
-			if loadErr := LoadFromFile(targetPath); loadErr == nil {
-				_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Database version: %s, Date: %s}}::green", time.Now().Format(time.Stamp), Version, Date))
-			}
-
-			return nil
-		}
-
-		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Failed: %s}}::red", time.Now().Format(time.Stamp), err.Error()))
-		lastErr = err
+	err := downloadUSBIDs(source, targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to download USB IDs: %w", err)
 	}
 
-	return fmt.Errorf("failed to download USB IDs from all sources: %w", lastErr)
+	_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] ✓ USB IDs database successfully updated to: %s}}::green", time.Now().Format(time.Stamp), targetPath))
+
+	// Try to load and display version info
+	if loadErr := LoadFromFile(targetPath); loadErr == nil {
+		_, _ = cfmt.Println(cfmt.Sprintf("{{[%v] Database version: %s, Date: %s}}::green", time.Now().Format(time.Stamp), Version, Date))
+	}
+
+	return nil
 }
 
 // downloadUSBIDs downloads USB IDs file from a specific source
